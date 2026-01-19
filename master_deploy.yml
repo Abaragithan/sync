@@ -1,0 +1,28 @@
+---
+- name: Dynamic Multi-OS Management
+  hosts: "{{ target_host }}"
+  gather_facts: yes
+  tasks:
+    # WINDOWS LOGIC
+    - block:
+        - name: Copy installer to Windows
+          ansible.windows.win_copy:
+            src: "./software_repo/{{ file_name }}"
+            dest: "C:\\Temp\\{{ file_name }}"
+
+        - name: Install/Uninstall Windows application
+          ansible.windows.win_package:
+            path: "C:\\Temp\\{{ file_name }}"
+            state: "{{ app_state }}" # 'present' or 'absent'
+            arguments: /S
+      when: ansible_os_family == "Windows"
+
+    # LINUX LOGIC
+    - block:
+        - name: Linux - Install/Uninstall via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: "{{ app_state }}"
+            update_cache: yes
+          become: yes
+      when: ansible_os_family == "Debian"
