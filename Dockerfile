@@ -1,4 +1,3 @@
-ansible-galaxy collection list
 FROM python:3.12
 
 # Install system dependencies

@@ -14,7 +14,7 @@ cd sync
 ### 2. Build the Docker image
 
 ```bash
-docker build -t sync:latest .
+sudo docker build -t sync:latest .
 ```
 
 ### 3. Make the run script executable
