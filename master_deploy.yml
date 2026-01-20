@@ -3,8 +3,14 @@
   hosts: "{{ target_host }}"
   gather_facts: yes
   tasks:
+
     # WINDOWS LOGIC
     - block:
+        - name: Ensure C:\Temp exists
+          ansible.windows.win_file:
+            path: C:\Temp
+            state: directory
+
         - name: Copy installer to Windows
           ansible.windows.win_copy:
             src: "./software_repo/{{ file_name }}"
@@ -13,9 +19,9 @@
         - name: Install/Uninstall Windows application
           ansible.windows.win_package:
             path: "C:\\Temp\\{{ file_name }}"
-            state: "{{ app_state }}" # 'present' or 'absent'
+            state: "{{ app_state }}"  # 'present' or 'absent'
             arguments: /S
-      when: ansible_os_family == "Windows"
+      when: ansible_facts["os_family"] == "Windows"
 
     # LINUX LOGIC
     - block:
@@ -25,4 +31,4 @@
             state: "{{ app_state }}"
             update_cache: yes
           become: yes
-      when: ansible_os_family == "Debian"
+      when: ansible_facts["os_family"] == "Debian"

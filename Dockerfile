@@ -1,11 +1,13 @@
-# Switching from slim to the full image
+ansible-galaxy collection list
 FROM python:3.12
 
-# Install only the essentials for Ansible and specific XCB support
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     sshpass \
     openssh-client \
     libxkbcommon-x11-0 \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,6 +16,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install official Ansible Windows collection
+RUN ansible-galaxy collection install ansible.windows
 
 # Copy project files
 COPY . .

@@ -4,4 +4,4 @@ venv/
 .env
 .git
 .vscode/
-software_repo
+software_repo/
