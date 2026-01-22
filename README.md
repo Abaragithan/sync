@@ -33,17 +33,41 @@ chmod +x ./run.sh
 
 ### Windows Client
 
-1. Open PowerShell as Administrator:
-
+# Enable WinRM
 ```powershell
 winrm quickconfig -force
+```
+
+# Allow unencrypted traffic (safe for LAN; use HTTPS for production)
+```powershell
+winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+```
+
+# Enable basic authentication
+```powershell
+winrm set winrm/config/service/auth '@{Basic="true"}'
+```
+
+# Increase memory and timeout limits
+```powershell
+winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="1024"}'
+```
+
+# Allow remote PowerShell execution
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force
+```
+
+# Open WinRM firewall port (HTTP 5985)
+```powershell
 Enable-NetFirewallRule -Name "WINRM-HTTP-In-TCP"
 ```
 
-2. (Optional) Set trusted hosts if the server is not in the same domain:
+# Restart WinRM service to apply changes
 
-```powershell
-Set-Item WSMan:\localhost\Client\TrustedHosts -Value "<Server-IP>"
+```poweshell
+Restart-Service WinRM
 ```
 
 ### Linux Client
