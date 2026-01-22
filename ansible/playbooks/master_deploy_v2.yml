@@ -1,0 +1,114 @@
+---
+- name: Dynamic Multi-OS Management
+  hosts: "{{ target_host }}"
+  gather_facts: yes
+
+  tasks:
+    # =========================
+    # WINDOWS LOGIC
+    # =========================
+    - block:
+        - name: Ensure C:\Temp exists
+          ansible.windows.win_file:
+            path: C:\Temp
+            state: directory
+
+        # ---------- INSTALL (PRESENT) ----------
+        - name: Copy installer to Windows
+          ansible.windows.win_copy:
+            src: "../software_repo/{{ file_name }}"
+            dest: "C:\\Temp\\{{ file_name }}"
+          when: app_state == "present"
+
+        - name: Install Windows application
+          ansible.windows.win_package:
+            path: "C:\\Temp\\{{ file_name }}"
+            state: present
+            arguments: /S
+          when: app_state == "present"
+
+        # ---------- UNINSTALL (ABSENT) ----------
+        - name: Set app_name automatically if not provided
+          ansible.builtin.set_fact:
+            app_name: >-
+              {{
+                (
+                  {
+                    '7zx64.exe': '7-Zip',
+                    'vlc-3.0.23-win32.exe': 'VLC media player'
+                  }.get(file_name, (file_name | regex_replace('\.exe$', '')))
+                )
+              }}
+          when: app_state == "absent" and (app_name is not defined or app_name | length == 0)
+
+        - name: Find matching app in registry (returns single JSON object or empty)
+          ansible.windows.win_powershell:
+            script: |
+              $name = "{{ app_name }}"
+              $uninstallPaths = @(
+                "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+              )
+
+              $app = Get-ItemProperty $uninstallPaths -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -and ($_.DisplayName -like "*$name*") } |
+                Select-Object -First 1 DisplayName, UninstallString, QuietUninstallString
+
+              if ($null -eq $app) {
+                ""   # empty output if not found
+              } else {
+                $app | ConvertTo-Json -Depth 3
+              }
+          register: app_match_json
+          when: app_state == "absent"
+
+        - name: Set app_match fact (safe parsing)
+          ansible.builtin.set_fact:
+            app_match: "{{ (app_match_json.output | default([]) | join('')) | from_json }}"
+          when: app_state == "absent" and (app_match_json.output | default([]) | join('') | length > 0)
+
+        - name: Show what we matched
+          debug:
+            msg:
+              - "Looking for: {{ app_name }}"
+              - "Matched: {{ app_match.DisplayName | default('NOT FOUND') }}"
+              - "QuietUninstallString: {{ app_match.QuietUninstallString | default('') }}"
+              - "UninstallString: {{ app_match.UninstallString | default('') }}"
+          when: app_state == "absent"
+
+        - name: Fail if app not found
+          ansible.builtin.fail:
+            msg: "Application not found. app_name='{{ app_name }}'. Try passing exact DisplayName with -e app_name='...'"
+          when: app_state == "absent" and (app_match is not defined)
+
+        - name: Run uninstall command (safe, no Invoke-Expression)
+          ansible.windows.win_shell: |
+            $cmd = @"
+            {{ app_match.QuietUninstallString | default(app_match.UninstallString) }}
+            "@.Trim()
+
+            if (-not $cmd) { Write-Output "No uninstall command found"; exit 1 }
+
+            Write-Output "Running: $cmd"
+            cmd.exe /c $cmd
+          register: uninstall_result
+          when: app_state == "absent" and (app_match is defined)
+
+        - name: Uninstall output
+          debug:
+            var: uninstall_result.stdout_lines
+          when: app_state == "absent" and uninstall_result is defined
+
+      when: ansible_facts["os_family"] == "Windows"
+
+    # =========================
+    # LINUX LOGIC (DEBIAN/UBUNTU)
+    # =========================
+    - block:
+        - name: Linux - Install/Uninstall via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: "{{ app_state }}"
+            update_cache: yes
+          become: yes
+      when: ansible_facts["os_family"] == "Debian"
