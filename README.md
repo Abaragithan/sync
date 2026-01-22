@@ -38,37 +38,51 @@ chmod +x ./run.sh
 winrm quickconfig -force
 ```
 
-# Allow unencrypted traffic (safe for LAN; use HTTPS for production)
+# Create a new rule
 ```powershell
-winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+New-NetFirewallRule -Name "WinRM-HTTP" -DisplayName "Windows Remote Management (HTTP-In)" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5985
 ```
 
-# Enable basic authentication
+# Verify the rule is active
+```powershell
+Get-NetFirewallRule -Name "WinRM-HTTP" | Select-Object Name, Enabled, Direction, Action
+```
+
+# Quick setup (run as Administrator)
+```powershell
+winrm quickconfig -q
+```
+
+# Set Netowrk Profile as Private
+```powershell
+ Set-NetConnectionProfile -NetworkCategory Private
+ ```
+
+# Enable Basic authentication
 ```powershell
 winrm set winrm/config/service/auth '@{Basic="true"}'
 ```
 
-# Increase memory and timeout limits
+# Allow unencrypted traffic (for basic auth over HTTP)
 ```powershell
-winrm set winrm/config '@{MaxTimeoutms="1800000"}'
-winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="1024"}'
+winrm set winrm/config/service '@{AllowUnencrypted="true"}'
 ```
 
-# Allow remote PowerShell execution
+# Verify configuration
 ```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force
+winrm get winrm/config
 ```
 
-# Open WinRM firewall port (HTTP 5985)
+# Test WinRM port connectivity ( change the ip address accordingly )
 ```powershell
-Enable-NetFirewallRule -Name "WINRM-HTTP-In-TCP"
+curl -v http://192.168.139.36:5985/wsman
 ```
 
-# Restart WinRM service to apply changes
-
-```poweshell
-Restart-Service WinRM
+# Test with Ansible
+```powershell
+ansible -i hosts.ini windows_clients -m win_ping
 ```
+
 
 ### Linux Client
 
@@ -103,3 +117,14 @@ sudo systemctl start ssh
 
    * Check permissions on `run.sh`.
    * Ensure Docker daemon is running.
+
+## ansible ping pong test example
+```bash
+ansible -i hosts.ini windows_clients -m win_ping
+```
+
+## install a file on windows using ansible cmd example
+```bash
+ansible-playbook -i hosts.ini playbooks/master_deploy.yml -e "target_host=windows_clients file_name=7zx64.exe app_state=present"
+```
+
