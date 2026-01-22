@@ -24,9 +24,13 @@ chmod +x ./run.sh
 ```
 
 ### 4. Start the dashboard
-
+### for ubuntu
 ```bash
 ./run.sh
+```
+### for windows
+```bash
+./run.ps1
 ```
 
 ## Client Configuration
