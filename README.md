@@ -111,14 +111,14 @@ curl -v http://192.168.139.36:5985/wsman
 
 Test with Ansible:
 ```bash
-ansible -i ansible/inventories/hosts.ini windows_clients -m win_ping
+ansible -i ansible/inventory/hosts.ini windows_clients -m win_ping
 ```
 
 ### Test Linux Client
 
 Test with Ansible:
 ```bash
-ansible -i ansible/inventories/hosts.ini linux_clients -m ping
+ansible -i ansible/inventory/hosts.ini linux_clients -m ping
 ```
 
 ## Usage Examples
@@ -127,14 +127,14 @@ ansible -i ansible/inventories/hosts.ini linux_clients -m ping
 
 Test connectivity to Windows clients:
 ```bash
-ansible -i ansible/inventories/hosts.ini windows_clients -m win_ping
+ansible -i ansible/inventory/hosts.ini windows_clients -m win_ping
 ```
 
 ### Deploy Application
 
 Install an application on Windows clients:
 ```bash
-ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/master_deploy.yml -e "target_host=windows_clients file_name=7zx64.exe app_state=present"
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/master_deploy.yml -e "target_host=windows_clients file_name=7zx64.exe app_state=present"
 ```
 
 ## Docker Information
