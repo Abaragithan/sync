@@ -28,8 +28,8 @@ For Ubuntu:
 ```
 
 For Windows:
-```bash
-./run.ps1
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
 ## Client Configuration
