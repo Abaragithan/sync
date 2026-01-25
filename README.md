@@ -29,8 +29,7 @@ chmod +x ./run.sh
 
 **For Windows:**
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-.\run.ps1
+powershell -ExecutionPolicy Bypass -File run.ps1
 ```
 
 ## Dependency Files
