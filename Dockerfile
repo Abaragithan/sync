@@ -1,27 +1,25 @@
-FROM python:3.12
+FROM python:3.12-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_DEFAULT_TIMEOUT=1000
+ENV PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     sshpass \
     openssh-client \
-    libxkbcommon-x11-0 \
+    ca-certificates \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Python requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-docker.txt .
+RUN pip install -r requirements-docker.txt
 
-# Install official Ansible Windows collection
+# Install Ansible collections you need
 RUN ansible-galaxy collection install ansible.windows
 
-# Copy project files
-COPY . .
-
-# Environment for GUI
-ENV QT_X11_NO_MITSHM=1
-
-CMD ["python", "app.py"]
+# Default to shell so GUI can run any ansible command easily
+WORKDIR /app/ansible
+CMD ["bash"]

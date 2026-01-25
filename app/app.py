@@ -68,22 +68,41 @@ class ModernDeployer(QMainWindow):
         # 1. Software List (Source) - Must allow dragging
         self.soft_list = QListWidget()
         self.soft_list.setDragEnabled(True)
-        self.soft_list.setDragDropMode(QListWidget.DragOnly) # Explicitly set to Drag Only
+        self.soft_list.setDragDropMode(QListWidget.DragOnly)
+        
+        # POPULATE SOFTWARE LIST
+        for sw_name in INVENTORY.keys():
+            self.soft_list.addItem(sw_name)
 
         # 2. Machine List (Target) - Must allow dropping
-        self.machine_list = MachineList() # Use the custom class we made
+        self.machine_list = MachineList()
         self.machine_list.setAcceptDrops(True)
-        self.machine_list.setDragDropMode(QListWidget.DropOnly) # Explicitly set to Drop Only
+        self.machine_list.setDragDropMode(QListWidget.DropOnly)
+        
+        # POPULATE MACHINE LIST (example - modify as needed)
+        self.machine_list.addItem("192.168.132.101 - Windows Server")
+        self.machine_list.addItem("192.168.132.102 - Linux Desktop")
+        self.machine_list.addItem("192.168.132.103 - Windows Workstation")
+        
+        # CONNECT THE DROP SIGNAL
+        self.machine_list.dropped_signal.connect(self.start_deployment)
 
         # Console
         self.console = QTextEdit()
         self.console.setReadOnly(True)
         self.console.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: monospace;")
 
-        top_split.addWidget(QLabel("Software:"))
-        top_split.addWidget(self.soft_list)
-        top_split.addWidget(QLabel("Target Fleet:"))
-        top_split.addWidget(self.machine_list)
+        # Layout structure with labels
+        left_panel = QVBoxLayout()
+        left_panel.addWidget(QLabel("Software:"))
+        left_panel.addWidget(self.soft_list)
+        
+        right_panel = QVBoxLayout()
+        right_panel.addWidget(QLabel("Target Fleet:"))
+        right_panel.addWidget(self.machine_list)
+
+        top_split.addLayout(left_panel)
+        top_split.addLayout(right_panel)
 
         layout.addLayout(top_split)
         layout.addWidget(QLabel("Activity Log:"))
@@ -92,6 +111,9 @@ class ModernDeployer(QMainWindow):
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+        
+        # Initial message
+        self.console.append("[READY] Drag software to target machines to deploy")
 
     def start_deployment(self, sw_name, target_text):
         ip = target_text.split(" ")[0]
