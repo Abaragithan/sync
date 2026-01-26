@@ -2,15 +2,15 @@ from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
 from PySide6.QtCore import Signal, Qt
 
 class PcCard(QFrame):
-    toggled = Signal(str, bool)     # ip, selected?
-    delete_requested = Signal(str)  # ip
+    toggled = Signal(str, bool)     
+    delete_requested = Signal(str)  
 
     def __init__(self, name: str, ip: str):
         super().__init__()
         self.ip = ip
         self.selected = False
 
-        # ✅ Smaller card size
+        
         self.setFixedSize(150, 68)
 
         self.setObjectName("PcCard")
@@ -35,7 +35,7 @@ class PcCard(QFrame):
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(6)
 
-        # Keep name short (PC-01 etc.)
+        
         title = QLabel(name)
         title.setStyleSheet("font-weight: 700; font-size: 12px;")
         title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)

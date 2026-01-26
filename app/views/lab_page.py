@@ -1,32 +1,164 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
-    QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox
+    QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
+    QStyledItemDelegate, QListView, QStyleOptionViewItem   
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QRect, QSize, QEvent
 
 from .widgets.pc_card import PcCard
+from .create_lab_dialog import CreateLabDialog
+
+from PySide6.QtGui import QPainter, QColor
+from PySide6.QtWidgets import QStyle
+
+
+
+
+class LabComboDelegate(QStyledItemDelegate):
+    """
+    Paint each popup row as:
+        Lab name .......... ✏ 🗑
+    with explicit colors so it stays visible under dark themes.
+    """
+
+    def __init__(self, combo: "LabComboBox"):
+        super().__init__(combo)
+        self.combo = combo
+        self.btn_size = 18
+        self.gap = 8
+
+    def sizeHint(self, option, index):
+        base = super().sizeHint(option, index)
+        return QSize(base.width(), max(base.height(), 34))
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
+        painter.save()
+
+        lab = index.data(Qt.DisplayRole) or ""
+
+        rect = option.rect
+
+        # --- Colors  ---
+        bg_normal = QColor("#111827")     # dark
+        bg_hover = QColor("#1f2937")      # hover-ish
+        bg_selected = QColor("#2563eb")   # blue selected
+        text_normal = QColor("#e5e7eb")   # light text
+        text_selected = QColor("#ffffff") # white
+        icon_color = QColor("#e5e7eb")
+
+       
+        is_selected = bool(option.state & QStyle.State_Selected)
+        is_hover = bool(option.state & QStyle.State_MouseOver)
+
+       
+        if is_selected:
+            painter.fillRect(rect, bg_selected)
+        elif is_hover:
+            painter.fillRect(rect, bg_hover)
+        else:
+            painter.fillRect(rect, bg_normal)
+
+        
+        right_padding = (self.btn_size * 2) + (self.gap * 3)
+        text_rect = QRect(rect.left() + 12, rect.top(), rect.width() - right_padding, rect.height())
+
+        painter.setPen(text_selected if is_selected else text_normal)
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, lab)
+
+      
+        edit_rect = self.edit_rect(rect)
+        del_rect = self.delete_rect(rect)
+
+        painter.setPen(icon_color)
+        painter.drawText(edit_rect, Qt.AlignCenter, "✏")
+        painter.drawText(del_rect, Qt.AlignCenter, "🗑")
+
+        painter.restore()
+
+    def edit_rect(self, rect: QRect) -> QRect:
+        x = rect.right() - (self.btn_size * 2) - (self.gap * 2)
+        y = rect.top() + (rect.height() - self.btn_size) // 2
+        return QRect(x, y, self.btn_size, self.btn_size)
+
+    def delete_rect(self, rect: QRect) -> QRect:
+        x = rect.right() - self.btn_size - self.gap
+        y = rect.top() + (rect.height() - self.btn_size) // 2
+        return QRect(x, y, self.btn_size, self.btn_size)
+
+
+class LabComboBox(QComboBox):
+    edit_requested = Signal(str)
+    delete_requested = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._view = QListView()
+        self.setView(self._view)
+
+        self._delegate = LabComboDelegate(self)
+        self.setItemDelegate(self._delegate)
+
+      
+        self._view.setStyleSheet("""
+            QListView {
+                background: #111827;
+                color: #e5e7eb;
+                border: 1px solid #334155;
+                outline: none;
+            }
+        """)
+
+        
+        self._view.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj == self._view.viewport() and event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+
+            index = self._view.indexAt(pos)
+            if not index.isValid():
+                return False
+
+            rect = self._view.visualRect(index)
+            edit_rect = self._delegate.edit_rect(rect)
+            del_rect = self._delegate.delete_rect(rect)
+
+            lab = index.data(Qt.DisplayRole)
+
+           
+            if edit_rect.contains(pos):
+                self.edit_requested.emit(lab)
+                return True
+
+            if del_rect.contains(pos):
+                self.delete_requested.emit(lab)
+                return True
+
+            return False
+
+        return super().eventFilter(obj, event)
+
+
 
 
 class LabPage(QWidget):
     next_to_software = Signal()
-
-    # 3 parts, each 7 rows × 5 cols = 35, total 105 (fits your 100~101 count too)
-    PARTS = 3
-    ROWS = 7
-    COLS = 4
-    PER_PART = ROWS * COLS
+    edit_lab_requested = Signal(str)   
 
     def __init__(self, inventory_manager, state):
         super().__init__()
         self.inventory_manager = inventory_manager
         self.state = state
 
-        self.manual_mode = True
         self.cards_by_ip = {}
-        self.pcs_cache = []
+        self.part_frames = []
+        self.part_grids = []
 
         self._build_ui()
         self._load_labs()
+
+   
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -34,237 +166,247 @@ class LabPage(QWidget):
         root.setSpacing(14)
 
         title = QLabel("Lab Deployment")
-        title.setStyleSheet("font-size: 26px; font-weight: 800;")
+        title.setStyleSheet("font-size:26px; font-weight:800;")
         root.addWidget(title)
 
-        # Controls row
-        row = QHBoxLayout()
-        row.setSpacing(12)
+       
+        controls = QHBoxLayout()
+        controls.setSpacing(10)
 
-        row.addWidget(QLabel("Lab:"))
-        self.lab_combo = QComboBox()
+        controls.addWidget(QLabel("Lab:"))
+
+   
+        self.lab_combo = LabComboBox()
         self.lab_combo.currentTextChanged.connect(self._on_lab_changed)
-        row.addWidget(self.lab_combo)
+        self.lab_combo.edit_requested.connect(self._edit_lab_from_popup)
+        self.lab_combo.delete_requested.connect(self._delete_lab_from_popup)
+        controls.addWidget(self.lab_combo)
 
-        row.addSpacing(16)
+        controls.addSpacing(16)
 
-        # ✅ Global OS selection (dual-boot)
-        row.addWidget(QLabel("Target OS:"))
+        controls.addWidget(QLabel("Target OS:"))
         self.os_combo = QComboBox()
         self.os_combo.addItems(["Windows", "Linux"])
         self.os_combo.currentTextChanged.connect(self._on_target_os_changed)
-        self.os_combo.setFixedWidth(130)
-        row.addWidget(self.os_combo)
+        self.os_combo.setFixedWidth(120)
+        controls.addWidget(self.os_combo)
 
-        row.addStretch()
+        controls.addStretch()
+
+        self.create_lab_btn = QPushButton("➕ Create Lab")
+        self.create_lab_btn.clicked.connect(self._create_lab)
+        controls.addWidget(self.create_lab_btn)
 
         self.select_btn = QPushButton("Select PCs")
-        self.select_btn.setStyleSheet("background:#2a2a2a;")
         self.select_btn.clicked.connect(self._open_select_menu)
-        row.addWidget(self.select_btn)
+        controls.addWidget(self.select_btn)
 
-        root.addLayout(row)
+        root.addLayout(controls)
 
-        # Scroll area holding 3 parts
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea{border:none;}")
-        wrap = QWidget()
-        wrap_layout = QHBoxLayout(wrap)
-        wrap_layout.setContentsMargins(0, 0, 0, 0)
-        wrap_layout.setSpacing(18)
+      
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setStyleSheet("QScrollArea{border:none;}")
 
-        self.part_frames = []
-        self.part_grids = []
+        self.wrap = QWidget()
+        self.wrap_layout = QHBoxLayout(self.wrap)
+        self.wrap_layout.setSpacing(18)
+        self.wrap_layout.setContentsMargins(0, 0, 0, 0)
 
-        for part_index in range(self.PARTS):
-            frame = QFrame()
-            frame.setObjectName("Card")
-            frame.setStyleSheet("""
-                QFrame#Card {
-                    background-color: #1b1b1b;
-                    border: 1px solid #2a2a2a;
-                    border-radius: 12px;
-                }
-            """)
-            frame_layout = QVBoxLayout(frame)
-            frame_layout.setContentsMargins(14, 14, 14, 14)
-            frame_layout.setSpacing(10)
+        self.scroll.setWidget(self.wrap)
+        root.addWidget(self.scroll, 1)
 
-            label = QLabel(f"Section {part_index + 1}")
-            label.setStyleSheet("font-weight: 700; color:#cbd5e1;")
-            frame_layout.addWidget(label)
-
-            grid = QGridLayout()
-            grid.setContentsMargins(0, 0, 0, 0)
-            grid.setHorizontalSpacing(10)
-            grid.setVerticalSpacing(10)
-            frame_layout.addLayout(grid)
-
-            self.part_frames.append(frame)
-            self.part_grids.append(grid)
-            wrap_layout.addWidget(frame, 1)
-
-        scroll.setWidget(wrap)
-        root.addWidget(scroll, 1)
-
-        # Footer
-        footer = QFrame(objectName="Card")
+       
+        footer = QFrame()
         footer.setStyleSheet("""
-            QFrame#Card {
-                background-color: #1b1b1b;
-                border: 1px solid #2a2a2a;
-                border-radius: 12px;
+            QFrame {
+                background:#1b1b1b;
+                border-radius:12px;
             }
         """)
-        lay = QHBoxLayout(footer)
-        lay.setContentsMargins(16, 12, 16, 12)
+        f = QHBoxLayout(footer)
 
         self.count_lbl = QLabel("No PCs selected")
         self.count_lbl.setStyleSheet("color:#ff6b6b;")
-        lay.addWidget(self.count_lbl)
+        f.addWidget(self.count_lbl)
 
-        lay.addStretch()
+        f.addStretch()
 
         self.target_os_lbl = QLabel("Target OS: WINDOWS")
         self.target_os_lbl.setStyleSheet("color:#9aa4b2;")
-        lay.addWidget(self.target_os_lbl)
+        f.addWidget(self.target_os_lbl)
 
-        lay.addSpacing(12)
-
-        self.to_software_btn = QPushButton("Next: Select Software →")
-        self.to_software_btn.setEnabled(False)
-        self.to_software_btn.clicked.connect(self._stage_and_next)
-        lay.addWidget(self.to_software_btn)
+        self.next_btn = QPushButton("Next → Software")
+        self.next_btn.setEnabled(False)
+        self.next_btn.setStyleSheet("""
+            QPushButton {
+                background:#2563eb;
+                color:white;
+                padding:8px 16px;
+                border-radius:8px;
+                font-weight:600;
+            }
+            QPushButton:disabled {
+                background:#334155;
+                color:#94a3b8;
+            }
+            QPushButton:hover:!disabled {
+                background:#1d4ed8;
+            }
+        """)
+        self.next_btn.clicked.connect(self.next_to_software.emit)
+        f.addWidget(self.next_btn)
 
         root.addWidget(footer)
 
-    def _load_labs(self):
-        labs = self.inventory_manager.get_all_labs()
-        self.lab_combo.clear()
-        if labs:
-            self.lab_combo.addItems(labs)
-        else:
-            self.lab_combo.addItem("No labs available")
+   
 
-        # default OS from state
-        self.os_combo.setCurrentText("Windows" if self.state.target_os == "windows" else "Linux")
-        self._update_target_os_label()
-
-    def _on_target_os_changed(self, txt: str):
-        self.state.target_os = "windows" if txt.lower().startswith("win") else "linux"
-        self._update_target_os_label()
-
-    def _update_target_os_label(self):
-        self.target_os_lbl.setText(f"Target OS: {self.state.target_os.upper()}")
-
-    def _on_lab_changed(self, lab):
-        if not lab or lab == "No labs available":
+    def _create_lab(self):
+        dlg = CreateLabDialog(self)
+        if dlg.exec() != QDialog.Accepted:
             return
-        self.state.current_lab = lab
-        self.state.clear_targets()
-        self._render_lab()
-        self._update_footer()
 
-    def _clear_all_grids(self):
-        for grid in self.part_grids:
-            while grid.count():
-                item = grid.takeAt(0)
-                w = item.widget()
-                if w:
-                    w.deleteLater()
+        data = dlg.get_data()
+        layout = data["layout"]
+        ips = data["ips"]
 
-    def _render_lab(self):
-        self._clear_all_grids()
+        pcs = []
+        idx = 0
+        for sec in range(1, layout["sections"] + 1):
+            for r in range(1, layout["rows"] + 1):
+                for c in range(1, layout["cols"] + 1):
+                    pcs.append({
+                        "name": f"PC-{idx+1:03d}",
+                        "ip": ips[idx],
+                        "section": sec,
+                        "row": r,
+                        "col": c
+                    })
+                    idx += 1
+
+        self.inventory_manager.add_lab_with_layout(data["lab_name"], layout, pcs)
+
+        self._load_labs()
+        self.lab_combo.setCurrentText(data["lab_name"])
+
+  
+
+    def _clear_sections(self):
+        for frame in self.part_frames:
+            frame.deleteLater()
+        self.part_frames.clear()
+        self.part_grids.clear()
         self.cards_by_ip.clear()
 
-        pcs = self.inventory_manager.get_pcs_for_lab(self.state.current_lab) or []
-        self.pcs_cache = pcs
+    def _render_lab(self):
+        self._clear_sections()
 
-        if not pcs:
-            msg = QLabel("No PCs found in this lab.")
-            msg.setStyleSheet("color:#9aa4b2; padding:20px;")
-            self.part_grids[0].addWidget(msg, 0, 0)
+        lab = self.state.current_lab
+        layout = self.inventory_manager.get_lab_layout(lab)
+        pcs = self.inventory_manager.get_pcs_for_lab(lab)
+
+        if not layout or not pcs:
             return
 
-        # Fill Section 1 -> Section 2 -> Section 3
-        # Each section is 7x5
-        for idx, pc in enumerate(pcs):
-            part = idx // self.PER_PART
-            if part >= self.PARTS:
-                break  # ignore extra beyond 105
+        for s in range(layout["sections"]):
+            frame = QFrame()
+            frame.setStyleSheet("background:#1b1b1b; border-radius:12px;")
+            v = QVBoxLayout(frame)
 
-            within = idx % self.PER_PART
-            r = within // self.COLS
-            c = within % self.COLS
+            label = QLabel(f"Section {s+1}")
+            label.setStyleSheet("font-weight:700;")
+            v.addWidget(label)
 
-            name = pc.get("name") or f"PC-{idx+1:02d}"
-            ip = pc.get("ip")
+            grid = QGridLayout()
+            grid.setSpacing(8)
+            v.addLayout(grid)
 
-            card = PcCard(name=name, ip=ip)
-            card.toggled.connect(self._on_card_toggled)
-            card.delete_requested.connect(self._delete_pc)
+            self.part_frames.append(frame)
+            self.part_grids.append(grid)
+            self.wrap_layout.addWidget(frame)
 
-            self.cards_by_ip[ip] = card
-            self.part_grids[part].addWidget(card, r, c)
+        for pc in pcs:
+            card = PcCard(pc["name"], pc["ip"])
+            card.toggled.connect(self._on_toggle)
+            card.delete_requested.connect(lambda ip=pc["ip"]: self._unselect_pc(ip))
+
+            self.cards_by_ip[pc["ip"]] = card
+            self.part_grids[pc["section"]-1].addWidget(card, pc["row"]-1, pc["col"]-1)
+
+ 
 
     def _open_select_menu(self):
         menu = QMenu(self)
         a_all = menu.addAction("Select All")
         a_clear = menu.addAction("Clear Selection")
-        a_manual = menu.addAction("Manual Select")
 
         act = menu.exec(self.select_btn.mapToGlobal(self.select_btn.rect().bottomLeft()))
         if act == a_all:
-            self.manual_mode = False
-            self._select_all(True)
+            for card in self.cards_by_ip.values():
+                card.set_selected(True)
         elif act == a_clear:
-            self._select_all(False)
-        elif act == a_manual:
-            self.manual_mode = True
+            for card in self.cards_by_ip.values():
+                card.set_selected(False)
 
-    def _select_all(self, value: bool):
-        for ip, card in self.cards_by_ip.items():
-            card.set_selected(value)
+    def _unselect_pc(self, ip):
+        card = self.cards_by_ip.get(ip)
+        if card:
+            card.set_selected(False)
 
-    def _on_card_toggled(self, ip, selected):
+    def _on_toggle(self, ip, selected):
         if selected:
             if ip not in self.state.selected_targets:
                 self.state.selected_targets.append(ip)
         else:
             if ip in self.state.selected_targets:
                 self.state.selected_targets.remove(ip)
-
-        self._update_footer()
-
-    def _delete_pc(self, ip):
-        lab = self.state.current_lab
-        ok = QMessageBox.question(self, "Delete PC", f"Remove {ip} from {lab}?")
-        if ok != QMessageBox.Yes:
-            return
-
-        removed = self.inventory_manager.remove_pc(lab, ip)
-        if not removed:
-            QMessageBox.warning(self, "Not Found", f"{ip} was not found in {lab}.")
-            return
-
-        if ip in self.state.selected_targets:
-            self.state.selected_targets.remove(ip)
-
-        self._render_lab()
         self._update_footer()
 
     def _update_footer(self):
         n = len(self.state.selected_targets)
-        if n == 0:
-            self.count_lbl.setText("No PCs selected")
-            self.count_lbl.setStyleSheet("color:#ff6b6b;")
-            self.to_software_btn.setEnabled(False)
-        else:
-            self.count_lbl.setText(f"✅ {n} PC(s) selected")
-            self.count_lbl.setStyleSheet("color:#4ecdc4;")
-            self.to_software_btn.setEnabled(True)
+        self.next_btn.setEnabled(n > 0)
+        self.count_lbl.setText(f"{n} PC(s) selected" if n else "No PCs selected")
 
-    def _stage_and_next(self):
-        # targets already staged in state.selected_targets
-        self.next_to_software.emit()
+  
+
+    def _edit_lab_from_popup(self, lab: str):
+        if lab:
+            self.edit_lab_requested.emit(lab)
+            self.lab_combo.hidePopup()
+
+    def _delete_lab_from_popup(self, lab: str):
+        if not lab:
+            return
+
+        if QMessageBox.question(self, "Delete Lab", f"Delete lab '{lab}' completely?") != QMessageBox.Yes:
+            return
+
+        if self.inventory_manager.delete_lab(lab):
+            if self.state.current_lab == lab:
+                self.state.current_lab = ""
+                self.state.selected_targets.clear()
+                self._clear_sections()
+                self._update_footer()
+
+            self._load_labs()
+            self.lab_combo.hidePopup()
+
+    # ---------------- Misc ----------------
+
+    def _load_labs(self):
+        self.lab_combo.clear()
+        self.lab_combo.addItems(self.inventory_manager.get_all_labs())
+        self._update_os_label()
+
+    def _on_lab_changed(self, lab):
+        self.state.current_lab = lab
+        self.state.selected_targets.clear()
+        self._render_lab()
+        self._update_footer()
+
+    def _on_target_os_changed(self, txt):
+        self.state.target_os = "windows" if "win" in txt.lower() else "linux"
+        self._update_os_label()
+
+    def _update_os_label(self):
+        self.target_os_lbl.setText(f"Target OS: {self.state.target_os.upper()}")
