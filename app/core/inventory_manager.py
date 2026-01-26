@@ -70,3 +70,44 @@ class InventoryManager:
         labs = list(self.data.keys())
         print(f"[INVENTORY] All labs: {labs}")  # Diagnostic
         return labs
+
+    def _save_inventory_json(self):
+        """Save current inventory data back to inventory.json"""
+        with open(self.inventory_file, "w") as f:
+            json.dump(self.inventory, f, indent=2)
+
+    def remove_pc(self, lab_name: str, ip: str) -> bool:
+        """
+        Remove a PC by IP from a lab and persist to JSON.
+        Returns True if removed, False if not found.
+        """
+        removed = False
+
+        # ✅ Case 1: inventory stored like {"labs": {"Lab1": [pcs], ...}}
+        if isinstance(self.inventory, dict) and "labs" in self.inventory and isinstance(self.inventory["labs"], dict):
+            if lab_name in self.inventory["labs"] and isinstance(self.inventory["labs"][lab_name], list):
+                before = len(self.inventory["labs"][lab_name])
+                self.inventory["labs"][lab_name] = [pc for pc in self.inventory["labs"][lab_name] if pc.get("ip") != ip]
+                removed = len(self.inventory["labs"][lab_name]) != before
+
+        # ✅ Case 2: inventory stored like {"labs": [{"name":"Lab1","pcs":[...]}, ...]}
+        elif isinstance(self.inventory, dict) and "labs" in self.inventory and isinstance(self.inventory["labs"], list):
+            for lab in self.inventory["labs"]:
+                if isinstance(lab, dict) and lab.get("name") == lab_name:
+                    pcs = lab.get("pcs", [])
+                    if isinstance(pcs, list):
+                        before = len(pcs)
+                        lab["pcs"] = [pc for pc in pcs if pc.get("ip") != ip]
+                        removed = len(lab["pcs"]) != before
+                    break
+
+        # ✅ Case 3: inventory stored directly as {"Lab1":[pcs], "Lab2":[pcs]}
+        elif isinstance(self.inventory, dict) and lab_name in self.inventory and isinstance(self.inventory[lab_name], list):
+            before = len(self.inventory[lab_name])
+            self.inventory[lab_name] = [pc for pc in self.inventory[lab_name] if pc.get("ip") != ip]
+            removed = len(self.inventory[lab_name]) != before
+
+        if removed:
+            self._save_inventory_json()
+
+        return removed

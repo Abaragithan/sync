@@ -45,4 +45,5 @@ echo "Installing GUI requirements..."
 pip install -r requirements-gui.txt
 
 echo "Running the GUI..."
-python app/app.py
+python app/main.py
+#python app/app.py
