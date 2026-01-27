@@ -16,7 +16,7 @@
         # ---------- INSTALL (PRESENT) ----------
         - name: Copy installer to Windows
           ansible.windows.win_copy:
-            src: "../software_repo/{{ file_name }}"
+            src: "{{ playbook_dir }}/../../software_repo/{{ file_name }}"
             dest: "C:\\Temp\\{{ file_name }}"
           when: app_state == "present"
 
