@@ -136,13 +136,13 @@ class SoftwarePage(QWidget):
 
         self.console.append(f"[START] {action.upper()} {software_name} on {len(targets)} target(s)")
 
-        # ✅ Create a temporary inventory file with all targets (no overwrite race)
+      
         hosts_content = "[targets]\n" + "\n".join(targets) + "\n"
         fd, hosts_path = tempfile.mkstemp(prefix="sync_hosts_", suffix=".ini")
         with os.fdopen(fd, "w") as f:
             f.write(hosts_content)
 
-        # ✅ Build extra vars
+        
         ext_vars = {
             "server_ip": SERVER_IP,
             "file_name": app_data.get("file", ""),
@@ -151,13 +151,13 @@ class SoftwarePage(QWidget):
             "app_state": "present" if action in ("install", "update") else "absent"
         }
 
-        # ✅ Build the playbook command
+     
         ansible_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../ansible")
         playbook = os.path.join(ansible_dir, "playbooks/master_deploy.yml")
 
         cmd = f"ansible-playbook -i {hosts_path} {playbook} -e '{json.dumps(ext_vars)}'"
 
-        # ✅ Start worker safely (and keep reference!)
+      
         worker = AnsibleWorker(cmd)
         self.workers.append(worker)
 
@@ -166,7 +166,7 @@ class SoftwarePage(QWidget):
         def _cleanup(ok, w=worker, hosts=hosts_path):
             self.console.append("[DONE] Success" if ok else "[DONE] Failed")
 
-            # remove temp hosts file
+       
             try:
                 if os.path.exists(hosts):
                     os.remove(hosts)

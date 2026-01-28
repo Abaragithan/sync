@@ -9,7 +9,7 @@ class InventoryManager:
     """
     Inventory supports TWO formats:
 
-    OLD (your current):
+    OLD:
       {
         "Lab1": [ {ip, os, name}, ... ],
         "Lab2": [ ... ]
@@ -30,7 +30,7 @@ class InventoryManager:
         self.data: Dict[str, Any] = self._load()
         print(f"[INVENTORY] Loaded {len(self.get_all_labs())} labs: {self.get_all_labs()}")
 
-   
+  
 
     def _load(self) -> Dict[str, Any]:
         data_dir = os.path.dirname(INVENTORY_FILE)
@@ -41,12 +41,12 @@ class InventoryManager:
             try:
                 with open(INVENTORY_FILE, "r") as f:
                     loaded = json.load(f)
-                print(f"[INVENTORY] Loaded from JSON.")
+                print("[INVENTORY] Loaded from JSON.")
                 return loaded
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[INVENTORY] JSON load error: {e}. Re-seeding...")
 
-       
+      
         print("[INVENTORY] Seeding default inventory...")
         default: Dict[str, List[Dict]] = {}
         base_ip = 101
@@ -65,19 +65,35 @@ class InventoryManager:
         print(f"[INVENTORY] Seeded {len(default)} labs with 100 PCs each.")
         return default
 
-    def _save(self, data: Dict[str, Any]):
-        try:
-            with open(INVENTORY_FILE, "w") as f:
-                json.dump(data, f, indent=2)
-            print(f"[INVENTORY] Saved to {INVENTORY_FILE}")
-        except IOError as e:
-            print(f"[INVENTORY] Save error: {e}")
-            raise
+    def _save(self, data: Dict[str, Any]) -> None:
+        with open(INVENTORY_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"[INVENTORY] Saved to {INVENTORY_FILE}")
 
     def _is_new_format(self) -> bool:
         return isinstance(self.data, dict) and "labs" in self.data and isinstance(self.data["labs"], dict)
 
-    
+    def _migrate_old_to_new_if_needed(self) -> None:
+        """
+        If inventory is old format, migrate it into NEW format once.
+        """
+        if self._is_new_format():
+            return
+
+        old = self.data
+        new = {"labs": {}}
+
+        for lab_name, pcs in old.items():
+            if lab_name == "labs":
+                continue
+          
+            new["labs"][lab_name] = {"layout": None, "pcs": pcs}
+
+        self.data = new
+        self._save(self.data)
+        print("[INVENTORY] Migrated OLD format -> NEW format")
+
+
 
     def get_all_labs(self) -> List[str]:
         if self._is_new_format():
@@ -90,7 +106,7 @@ class InventoryManager:
 
     def get_lab_layout(self, lab_name: str) -> Optional[dict]:
         """
-        Returns layout dict if lab exists in NEW format. Otherwise None.
+        Returns layout dict if lab exists in NEW format, else None.
         """
         if self._is_new_format():
             rec = self.data["labs"].get(lab_name)
@@ -108,7 +124,6 @@ class InventoryManager:
         if self._is_new_format():
             rec = self.data["labs"].get(lab, {})
             pcs = rec.get("pcs", []) if isinstance(rec, dict) else []
-           
         else:
             pcs = self.data.get(lab, [])
             if os_filter and os_filter != "All":
@@ -117,14 +132,49 @@ class InventoryManager:
         print(f"[INVENTORY] {len(pcs)} PCs for {lab} (filter: {os_filter})")
         return pcs
 
-    def add_pc(self, lab: str, pc: Dict):
+   
+    def add_lab_with_layout(self, lab_name: str, layout: dict, pcs: List[Dict]) -> None:
         """
-        Add PC to OLD format labs (simple list).
-        If you're using NEW format labs, prefer add_lab_with_layout / editing pcs directly.
+        Create/overwrite a lab in NEW format with explicit layout + pcs.
+        If currently OLD format, migrate to NEW first.
+        """
+        self._migrate_old_to_new_if_needed()
+
+        self.data["labs"][lab_name] = {
+            "layout": layout,
+            "pcs": pcs
+        }
+        self._save(self.data)
+        print(f"[INVENTORY] Created lab '{lab_name}' with {len(pcs)} PCs")
+
+    def delete_lab(self, lab_name: str) -> bool:
+        deleted = False
+
+        if self._is_new_format():
+            if lab_name in self.data["labs"]:
+                del self.data["labs"][lab_name]
+                deleted = True
+        else:
+            if lab_name in self.data:
+                del self.data[lab_name]
+                deleted = True
+
+        if deleted:
+            self._save(self.data)
+            print(f"[INVENTORY] Deleted lab '{lab_name}'")
+        else:
+            print(f"[INVENTORY] Delete failed (lab not found): {lab_name}")
+
+        return deleted
+
+    def add_pc(self, lab: str, pc: Dict) -> None:
+        """
+        Add a PC to a lab. Works in both formats.
+        For NEW format it appends into labs[lab]["pcs"].
         """
         if self._is_new_format():
             if lab not in self.data["labs"]:
-                self.data["labs"][lab] = {"layout": {"sections": 1, "rows": 1, "cols": 1}, "pcs": []}
+                self.data["labs"][lab] = {"layout": None, "pcs": []}
             rec = self.data["labs"][lab]
             if "pcs" not in rec or not isinstance(rec["pcs"], list):
                 rec["pcs"] = []
@@ -137,30 +187,7 @@ class InventoryManager:
         self._save(self.data)
         print(f"[INVENTORY] Added PC to {lab}: {pc.get('name')} ({pc.get('ip')})")
 
-    def add_lab_with_layout(self, lab_name: str, layout: dict, pcs: List[Dict]) -> None:
-        """
-        Creates/overwrites a lab using NEW format and persists to JSON.
-
-        If current inventory is OLD format, it will be migrated into NEW format automatically.
-        """
-        if not self._is_new_format():
-           
-            old = self.data
-            self.data = {"labs": {}}
-            for old_lab, old_pcs in old.items():
-                if old_lab == "labs":
-                    continue
-                self.data["labs"][old_lab] = {"layout": None, "pcs": old_pcs}
-
-        self.data["labs"][lab_name] = {"layout": layout, "pcs": pcs}
-        self._save(self.data)
-        print(f"[INVENTORY] Created lab '{lab_name}' with layout {layout} and {len(pcs)} PCs")
-
     def remove_pc(self, lab_name: str, ip: str) -> bool:
-        """
-        Remove a PC by IP from a lab and persist.
-        Works for both formats.
-        """
         removed = False
 
         if self._is_new_format():
@@ -183,27 +210,21 @@ class InventoryManager:
 
         return removed
 
-    
-    def delete_lab(self, lab_name: str) -> bool:
-        """
-        Delete an entire lab (OLD or NEW format).
-        Returns True if deleted.
-        """
-        deleted = False
+    def update_pc_ip(self, lab_name: str, old_ip: str, new_ip: str) -> bool:
+        pcs = self.get_pcs_for_lab(lab_name)
 
-        if self._is_new_format():
-            if lab_name in self.data["labs"]:
-                del self.data["labs"][lab_name]
-                deleted = True
-        else:
-            if lab_name in self.data:
-                del self.data[lab_name]
-                deleted = True
+        # prevent duplicates
+        for pc in pcs:
+            if pc.get("ip") == new_ip:
+                print("[INVENTORY] Duplicate IP blocked:", new_ip)
+                return False
 
-        if deleted:
-            self._save(self.data)
-            print(f"[INVENTORY] Deleted lab '{lab_name}'")
-        else:
-            print(f"[INVENTORY] Delete failed (lab not found): {lab_name}")
+      
+        for pc in pcs:
+            if pc.get("ip") == old_ip:
+                pc["ip"] = new_ip
+                self._save(self.data)
+                print(f"[INVENTORY] IP updated {old_ip} → {new_ip}")
+                return True
 
-        return deleted
+        return False

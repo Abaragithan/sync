@@ -37,6 +37,11 @@ class CreateLabDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(480)
 
+        # ✅ cache generated data so get_data() cannot fail later
+        self._cached_ips: list[str] = []
+        self._cached_layout: dict | None = None
+        self._cached_name: str = ""
+
         self._build_ui()
 
     def _build_ui(self):
@@ -115,6 +120,7 @@ class CreateLabDialog(QDialog):
         # Buttons
         btns = QHBoxLayout()
         btns.addStretch()
+
         cancel = QPushButton("Cancel")
         cancel.setStyleSheet("background:#2a2a2a;")
         cancel.clicked.connect(self.reject)
@@ -145,19 +151,43 @@ class CreateLabDialog(QDialog):
         total = self.sections.value() * self.rows.value() * self.cols.value()
         s_ip = self.start_ip.text().strip()
         e_ip = self.end_ip.text().strip()
+
         if not s_ip or not e_ip:
             QMessageBox.warning(self, "Missing", "Please enter Start IP and End IP.")
             return
 
+        layout = {
+            "sections": self.sections.value(),
+            "rows": self.rows.value(),
+            "cols": self.cols.value(),
+        }
+
         try:
-            _ = _generate_ips(s_ip, e_ip, total)
+            ips = _generate_ips(s_ip, e_ip, total)
         except Exception as e:
             QMessageBox.critical(self, "Invalid IP Range", str(e))
             return
 
+        # ✅ cache once (prevents get_data() from failing later)
+        self._cached_name = name
+        self._cached_layout = layout
+        self._cached_ips = ips
+
         self.accept()
 
     def get_data(self) -> dict:
+        """
+        Return cached values generated during _validate_and_accept().
+        If get_data() is called without accept(), we fallback to computing (safe).
+        """
+        if self._cached_layout and self._cached_ips and self._cached_name:
+            return {
+                "lab_name": self._cached_name,
+                "layout": self._cached_layout,
+                "ips": self._cached_ips,
+            }
+
+        # Fallback (shouldn't happen if dialog accepted properly)
         total = self.sections.value() * self.rows.value() * self.cols.value()
         ips = _generate_ips(self.start_ip.text(), self.end_ip.text(), total)
         return {
@@ -167,5 +197,5 @@ class CreateLabDialog(QDialog):
                 "rows": self.rows.value(),
                 "cols": self.cols.value(),
             },
-            "ips": ips
+            "ips": ips,
         }

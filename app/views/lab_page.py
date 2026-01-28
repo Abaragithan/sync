@@ -1,17 +1,14 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
     QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
-    QStyledItemDelegate, QListView, QStyleOptionViewItem   
+    QStyledItemDelegate, QListView, QStyleOptionViewItem
 )
 from PySide6.QtCore import Signal, Qt, QRect, QSize, QEvent
-
-from .widgets.pc_card import PcCard
-from .create_lab_dialog import CreateLabDialog
-
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import QStyle
 
-
+from .widgets.pc_card import PcCard
+from .create_lab_dialog import CreateLabDialog
 
 
 class LabComboDelegate(QStyledItemDelegate):
@@ -20,7 +17,6 @@ class LabComboDelegate(QStyledItemDelegate):
         Lab name .......... ✏ 🗑
     with explicit colors so it stays visible under dark themes.
     """
-
     def __init__(self, combo: "LabComboBox"):
         super().__init__(combo)
         self.combo = combo
@@ -30,27 +26,23 @@ class LabComboDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         base = super().sizeHint(option, index)
         return QSize(base.width(), max(base.height(), 34))
-
+   # -------- Inline edit save --------
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         painter.save()
 
         lab = index.data(Qt.DisplayRole) or ""
-
         rect = option.rect
 
-        # --- Colors  ---
-        bg_normal = QColor("#111827")     # dark
-        bg_hover = QColor("#1f2937")      # hover-ish
-        bg_selected = QColor("#2563eb")   # blue selected
-        text_normal = QColor("#e5e7eb")   # light text
-        text_selected = QColor("#ffffff") # white
+        bg_normal = QColor("#111827")
+        bg_hover = QColor("#1f2937")
+        bg_selected = QColor("#2563eb")
+        text_normal = QColor("#e5e7eb")
+        text_selected = QColor("#ffffff")
         icon_color = QColor("#e5e7eb")
 
-       
         is_selected = bool(option.state & QStyle.State_Selected)
         is_hover = bool(option.state & QStyle.State_MouseOver)
 
-       
         if is_selected:
             painter.fillRect(rect, bg_selected)
         elif is_hover:
@@ -58,14 +50,17 @@ class LabComboDelegate(QStyledItemDelegate):
         else:
             painter.fillRect(rect, bg_normal)
 
-        
         right_padding = (self.btn_size * 2) + (self.gap * 3)
-        text_rect = QRect(rect.left() + 12, rect.top(), rect.width() - right_padding, rect.height())
+        text_rect = QRect(
+            rect.left() + 12,
+            rect.top(),
+            rect.width() - right_padding,
+            rect.height()
+        )
 
         painter.setPen(text_selected if is_selected else text_normal)
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, lab)
 
-      
         edit_rect = self.edit_rect(rect)
         del_rect = self.delete_rect(rect)
 
@@ -99,7 +94,6 @@ class LabComboBox(QComboBox):
         self._delegate = LabComboDelegate(self)
         self.setItemDelegate(self._delegate)
 
-      
         self._view.setStyleSheet("""
             QListView {
                 background: #111827;
@@ -109,7 +103,6 @@ class LabComboBox(QComboBox):
             }
         """)
 
-        
         self._view.viewport().installEventFilter(self)
 
     def eventFilter(self, obj, event):
@@ -123,10 +116,8 @@ class LabComboBox(QComboBox):
             rect = self._view.visualRect(index)
             edit_rect = self._delegate.edit_rect(rect)
             del_rect = self._delegate.delete_rect(rect)
-
             lab = index.data(Qt.DisplayRole)
 
-           
             if edit_rect.contains(pos):
                 self.edit_requested.emit(lab)
                 return True
@@ -140,11 +131,9 @@ class LabComboBox(QComboBox):
         return super().eventFilter(obj, event)
 
 
-
-
 class LabPage(QWidget):
     next_to_software = Signal()
-    edit_lab_requested = Signal(str)   
+    edit_lab_requested = Signal(str)
 
     def __init__(self, inventory_manager, state):
         super().__init__()
@@ -158,8 +147,6 @@ class LabPage(QWidget):
         self._build_ui()
         self._load_labs()
 
-   
-
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -169,13 +156,11 @@ class LabPage(QWidget):
         title.setStyleSheet("font-size:26px; font-weight:800;")
         root.addWidget(title)
 
-       
         controls = QHBoxLayout()
         controls.setSpacing(10)
 
         controls.addWidget(QLabel("Lab:"))
 
-   
         self.lab_combo = LabComboBox()
         self.lab_combo.currentTextChanged.connect(self._on_lab_changed)
         self.lab_combo.edit_requested.connect(self._edit_lab_from_popup)
@@ -203,20 +188,21 @@ class LabPage(QWidget):
 
         root.addLayout(controls)
 
-      
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
 
         self.wrap = QWidget()
         self.wrap_layout = QHBoxLayout(self.wrap)
-        self.wrap_layout.setSpacing(18)
+
+        
+        self.wrap_layout.setSpacing(6)
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
+        self.wrap_layout.setAlignment(Qt.AlignTop)
 
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
 
-       
         footer = QFrame()
         footer.setStyleSheet("""
             QFrame {
@@ -259,8 +245,6 @@ class LabPage(QWidget):
 
         root.addWidget(footer)
 
-   
-
     def _create_lab(self):
         dlg = CreateLabDialog(self)
         if dlg.exec() != QDialog.Accepted:
@@ -285,11 +269,8 @@ class LabPage(QWidget):
                     idx += 1
 
         self.inventory_manager.add_lab_with_layout(data["lab_name"], layout, pcs)
-
         self._load_labs()
         self.lab_combo.setCurrentText(data["lab_name"])
-
-  
 
     def _clear_sections(self):
         for frame in self.part_frames:
@@ -311,14 +292,23 @@ class LabPage(QWidget):
         for s in range(layout["sections"]):
             frame = QFrame()
             frame.setStyleSheet("background:#1b1b1b; border-radius:12px;")
+
             v = QVBoxLayout(frame)
+
+            v.setContentsMargins(6, 6, 6, 6)
+            v.setSpacing(4)
+            v.setAlignment(Qt.AlignTop)
 
             label = QLabel(f"Section {s+1}")
             label.setStyleSheet("font-weight:700;")
             v.addWidget(label)
 
             grid = QGridLayout()
-            grid.setSpacing(8)
+
+            grid.setHorizontalSpacing(3)
+            grid.setVerticalSpacing(3)
+            grid.setContentsMargins(0, 0, 0, 0)
+
             v.addLayout(grid)
 
             self.part_frames.append(frame)
@@ -327,13 +317,14 @@ class LabPage(QWidget):
 
         for pc in pcs:
             card = PcCard(pc["name"], pc["ip"])
+
+            card.setFixedSize(64, 64)
+
             card.toggled.connect(self._on_toggle)
             card.delete_requested.connect(lambda ip=pc["ip"]: self._unselect_pc(ip))
 
             self.cards_by_ip[pc["ip"]] = card
             self.part_grids[pc["section"]-1].addWidget(card, pc["row"]-1, pc["col"]-1)
-
- 
 
     def _open_select_menu(self):
         menu = QMenu(self)
@@ -367,8 +358,6 @@ class LabPage(QWidget):
         self.next_btn.setEnabled(n > 0)
         self.count_lbl.setText(f"{n} PC(s) selected" if n else "No PCs selected")
 
-  
-
     def _edit_lab_from_popup(self, lab: str):
         if lab:
             self.edit_lab_requested.emit(lab)
@@ -390,8 +379,6 @@ class LabPage(QWidget):
 
             self._load_labs()
             self.lab_combo.hidePopup()
-
-    # ---------------- Misc ----------------
 
     def _load_labs(self):
         self.lab_combo.clear()

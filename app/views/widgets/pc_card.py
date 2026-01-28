@@ -11,7 +11,7 @@ class PcCard(QFrame):
         self.selected = False
 
         
-        self.setFixedSize(150, 68)
+        self.setFixedSize(70, 70)
 
         self.setObjectName("PcCard")
         self.setStyleSheet("""
@@ -43,20 +43,20 @@ class PcCard(QFrame):
         top.addWidget(title)
         top.addStretch()
 
-        del_btn = QPushButton("✕")
-        del_btn.setFixedSize(22, 22)
-        del_btn.setStyleSheet("""
-            QPushButton {
-                background: #2b2b2b;
-                border: none;
-                border-radius: 6px;
-                color: #ddd;
-                font-size: 11px;
-            }
-            QPushButton:hover { background: #3a3a3a; }
-        """)
-        del_btn.clicked.connect(lambda: self.delete_requested.emit(self.ip))
-        top.addWidget(del_btn)
+        # del_btn = QPushButton("✕")
+        # del_btn.setFixedSize(22, 22)
+        # del_btn.setStyleSheet("""
+        #     QPushButton {
+        #         background: #2b2b2b;
+        #         border: none;
+        #         border-radius: 6px;
+        #         color: #ddd;
+        #         font-size: 11px;
+        #     }
+        #     QPushButton:hover { background: #3a3a3a; }
+        # """)
+        # del_btn.clicked.connect(lambda: self.delete_requested.emit(self.ip))
+        # top.addWidget(del_btn)
 
         ip_lbl = QLabel(ip)
         ip_lbl.setStyleSheet("color:#9aa4b2; font-size: 11px;")
