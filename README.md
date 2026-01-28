@@ -1,4 +1,4 @@
-# Sync Deployer Dashboard
+# Sync Deployer
 
 A PySide6 GUI application that triggers Ansible playbooks inside a Docker container. This dashboard provides a unified interface for managing both Windows and Linux clients.
 
@@ -48,56 +48,11 @@ Run the setup script on your Windows client machine.
 
 1. Open PowerShell as Administrator
 2. Navigate to the folder containing the setup script
-3. Execute the following commands:
+3. Execute the following commands (change the ip address of your controller machine):
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.\setup-winrm-ansible.ps1
+.\setup-winrm-ansible.ps1 -ControllerIP "192.168.135.7" -AllowSelfSigned true
 ```
-
-#### Manual Windows Configuration
-
-If the automated setup fails, configure WinRM manually using the following commands in PowerShell as Administrator:
-
-**Enable WinRM:**
-```powershell
-winrm quickconfig -force
-```
-
-**Create firewall rule:**
-```powershell
-New-NetFirewallRule -Name "WinRM-HTTP" -DisplayName "Windows Remote Management (HTTP-In)" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5985
-```
-
-**Verify firewall rule:**
-```powershell
-Get-NetFirewallRule -Name "WinRM-HTTP" | Select-Object Name, Enabled, Direction, Action
-```
-
-**Run quick configuration:**
-```powershell
-winrm quickconfig -q
-```
-
-**Set network profile to Private:**
-```powershell
-Set-NetConnectionProfile -NetworkCategory Private
-```
-
-**Enable Basic authentication:**
-```powershell
-winrm set winrm/config/service/auth '@{Basic="true"}'
-```
-
-**Allow unencrypted traffic:**
-```powershell
-winrm set winrm/config/service '@{AllowUnencrypted="true"}'
-```
-
-**Verify WinRM configuration:**
-```powershell
-winrm get winrm/config
-```
-
 ### Linux Client Setup
 
 Ensure the SSH server is installed and running on your Linux client:
@@ -123,7 +78,7 @@ docker run --rm -it \
   -v "$PWD:/app" \
   -w /app/ansible \
   sync-ansible:latest \
-  ansible -i inventories/hosts.ini windows_clients -m win_ping
+  ansible -i inventory/hosts.ini windows_clients -m win_ping
 ```
 
 ### Test Linux Client
@@ -134,7 +89,7 @@ docker run --rm -it \
   -v "$PWD:/app" \
   -w /app/ansible \
   sync-ansible:latest \
-  ansible -i inventories/hosts.ini linux_clients -m ping
+  ansible -i inventory/hosts.ini linux_clients -m ping
 ```
 
 ## Usage Examples
@@ -147,7 +102,7 @@ docker run --rm -it \
   -v "$PWD:/app" \
   -w /app/ansible \
   sync-ansible:latest \
-  ansible -i inventories/hosts.ini windows_clients -m win_ping
+  ansible -i inventory/hosts.ini windows_clients -m win_ping
 ```
 
 ### Deploy Application
@@ -158,7 +113,7 @@ docker run --rm -it \
   -v "$PWD:/app" \
   -w /app/ansible \
   sync-ansible:latest \
-  ansible-playbook -i inventories/hosts.ini playbooks/master_deploy.yml \
+  ansible-playbook -i inventory/hosts.ini playbooks/master_deploy.yml \
   -e "target_host=windows_clients file_name=7zx64.exe app_state=present"
 ```
 
