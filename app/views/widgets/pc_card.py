@@ -1,19 +1,33 @@
+import os
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QPixmap
+
+
+def _abs_asset_path(rel_path: str) -> str:
+    """
+    Build absolute path from this file location.
+    This avoids 'working directory' problems.
+    """
+    base = os.path.dirname(os.path.abspath(__file__))  
+    app_dir = os.path.abspath(os.path.join(base, "..", ".."))
+    return os.path.join(app_dir, rel_path)
+
 
 class PcCard(QFrame):
-    toggled = Signal(str, bool)     
-    delete_requested = Signal(str)  
+    toggled = Signal(str, bool)
+    delete_requested = Signal(str)
 
-    def __init__(self, name: str, ip: str):
+    def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc.png"):
         super().__init__()
         self.ip = ip
         self.selected = False
 
-        
-        self.setFixedSize(70, 70)
+        self.setFixedSize(64, 64)
 
         self.setObjectName("PcCard")
+
+        # 🔹 Added QToolTip styling ONLY
         self.setStyleSheet("""
             QFrame#PcCard {
                 background: #1b1b1b;
@@ -24,45 +38,50 @@ class PcCard(QFrame):
                 border: 2px solid #007acc;
                 background: #1e2a33;
             }
+            QToolTip {
+                background-color: #020617;
+                color: #ffffff;          /* ✅ WHITE TEXT */
+                border: 1px solid #334155;
+                padding: 6px;
+                border-radius: 6px;
+                font-size: 12px;
+            }
         """)
-        self.setProperty("selected", False)
 
+        self.setProperty("selected", False)
+        self._build_ui(name, ip, icon_rel_path)
+
+    def _build_ui(self, name: str, ip: str, icon_rel_path: str):
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 8, 10, 8)
-        root.setSpacing(4)
+        root.setContentsMargins(2, 2, 2, 2)
+        root.setSpacing(0)
 
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(6)
-
-        
-        title = QLabel(name)
-        title.setStyleSheet("font-weight: 700; font-size: 12px;")
-        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-
-        top.addWidget(title)
         top.addStretch()
 
-        # del_btn = QPushButton("✕")
-        # del_btn.setFixedSize(22, 22)
-        # del_btn.setStyleSheet("""
-        #     QPushButton {
-        #         background: #2b2b2b;
-        #         border: none;
-        #         border-radius: 6px;
-        #         color: #ddd;
-        #         font-size: 11px;
-        #     }
-        #     QPushButton:hover { background: #3a3a3a; }
-        # """)
-        # del_btn.clicked.connect(lambda: self.delete_requested.emit(self.ip))
-        # top.addWidget(del_btn)
+        self.icon = QLabel()
+        self.icon.setAlignment(Qt.AlignCenter)
 
-        ip_lbl = QLabel(ip)
-        ip_lbl.setStyleSheet("color:#9aa4b2; font-size: 11px;")
+        pm = QPixmap(_abs_asset_path(icon_rel_path))
+        if not pm.isNull():
+            self.icon.setPixmap(
+                pm.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        else:
+            self.icon.setText("PC")
+            self.icon.setStyleSheet("color: #555; font-weight: 700; font-size: 12px;")
+
+        name_lbl = QLabel(name)
+        name_lbl.setAlignment(Qt.AlignCenter)
+        name_lbl.setStyleSheet("color:#ddd; font-size: 9px; font-weight: 600;")
 
         root.addLayout(top)
-        root.addWidget(ip_lbl)
+        root.addWidget(self.icon, 1, Qt.AlignCenter)
+        root.addWidget(name_lbl)
+
+       
+        self.setToolTip(f"{name}\n{ip}")
 
     def mousePressEvent(self, e):
         super().mousePressEvent(e)

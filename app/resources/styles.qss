@@ -127,3 +127,12 @@ QProgressBar::chunk {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #007acc, stop:1 #005a99);
     border-radius: 3px;
 }
+
+QToolTip {
+    background-color: #111827;   /* tooltip background */
+    color: #e5e7eb;              /* text color */
+    border: 1px solid #334155;
+    padding: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+}

@@ -20,13 +20,13 @@ class LabComboDelegate(QStyledItemDelegate):
     def __init__(self, combo: "LabComboBox"):
         super().__init__(combo)
         self.combo = combo
-        self.btn_size = 18
+        self.btn_size = 12
         self.gap = 8
 
     def sizeHint(self, option, index):
         base = super().sizeHint(option, index)
         return QSize(base.width(), max(base.height(), 34))
-   # -------- Inline edit save --------
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         painter.save()
 
@@ -195,10 +195,9 @@ class LabPage(QWidget):
         self.wrap = QWidget()
         self.wrap_layout = QHBoxLayout(self.wrap)
 
-        
-        self.wrap_layout.setSpacing(6)
+        self.wrap_layout.setSpacing(14)                
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
-        self.wrap_layout.setAlignment(Qt.AlignTop)
+        self.wrap_layout.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
 
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
@@ -279,6 +278,12 @@ class LabPage(QWidget):
         self.part_grids.clear()
         self.cards_by_ip.clear()
 
+        while self.wrap_layout.count():
+            item = self.wrap_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
     def _render_lab(self):
         self._clear_sections()
 
@@ -295,19 +300,21 @@ class LabPage(QWidget):
 
             v = QVBoxLayout(frame)
 
-            v.setContentsMargins(6, 6, 6, 6)
-            v.setSpacing(4)
-            v.setAlignment(Qt.AlignTop)
+            v.setContentsMargins(10, 10, 10, 10)
+            v.setSpacing(12)
+            v.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
             label = QLabel(f"Section {s+1}")
             label.setStyleSheet("font-weight:700;")
+            label.setAlignment(Qt.AlignLeft)
             v.addWidget(label)
 
             grid = QGridLayout()
 
-            grid.setHorizontalSpacing(3)
-            grid.setVerticalSpacing(3)
-            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setHorizontalSpacing(14)
+            grid.setVerticalSpacing(20)
+
+            grid.setContentsMargins(12, 12, 12, 12)
 
             v.addLayout(grid)
 
@@ -318,15 +325,24 @@ class LabPage(QWidget):
         for pc in pcs:
             card = PcCard(pc["name"], pc["ip"])
 
-            card.setFixedSize(64, 64)
+            
+            card.setFixedSize(70, 70)
 
             card.toggled.connect(self._on_toggle)
             card.delete_requested.connect(lambda ip=pc["ip"]: self._unselect_pc(ip))
 
             self.cards_by_ip[pc["ip"]] = card
-            self.part_grids[pc["section"]-1].addWidget(card, pc["row"]-1, pc["col"]-1)
+
+            grid = self.part_grids[pc["section"] - 1]
+            r = pc["row"] - 1
+            c = pc["col"] - 1
+            grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
 
     def _open_select_menu(self):
+        if not self.cards_by_ip:
+            QMessageBox.information(self, "No PCs", "No PCs loaded for this lab.")
+            return
+
         menu = QMenu(self)
         a_all = menu.addAction("Select All")
         a_clear = menu.addAction("Clear Selection")
@@ -335,14 +351,21 @@ class LabPage(QWidget):
         if act == a_all:
             for card in self.cards_by_ip.values():
                 card.set_selected(True)
+            self.state.selected_targets = list(self.cards_by_ip.keys())
         elif act == a_clear:
             for card in self.cards_by_ip.values():
                 card.set_selected(False)
+            self.state.selected_targets.clear()
+        
+        self._update_footer()
 
     def _unselect_pc(self, ip):
         card = self.cards_by_ip.get(ip)
         if card:
             card.set_selected(False)
+        if ip in self.state.selected_targets:
+            self.state.selected_targets.remove(ip)
+        self._update_footer()
 
     def _on_toggle(self, ip, selected):
         if selected:
