@@ -149,15 +149,15 @@ class LabPage(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(14)
+        root.setContentsMargins(15, 15, 15, 15)
+        root.setSpacing(4)
 
         title = QLabel("Lab Deployment")
         title.setStyleSheet("font-size:26px; font-weight:800;")
         root.addWidget(title)
 
         controls = QHBoxLayout()
-        controls.setSpacing(10)
+        controls.setSpacing(5)
 
         controls.addWidget(QLabel("Lab:"))
 
@@ -167,7 +167,7 @@ class LabPage(QWidget):
         self.lab_combo.delete_requested.connect(self._delete_lab_from_popup)
         controls.addWidget(self.lab_combo)
 
-        controls.addSpacing(16)
+        controls.addSpacing(10)
 
         controls.addWidget(QLabel("Target OS:"))
         self.os_combo = QComboBox()
@@ -195,7 +195,7 @@ class LabPage(QWidget):
         self.wrap = QWidget()
         self.wrap_layout = QHBoxLayout(self.wrap)
 
-        self.wrap_layout.setSpacing(14)                
+        self.wrap_layout.setSpacing(10)                
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
         self.wrap_layout.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
 
@@ -206,7 +206,7 @@ class LabPage(QWidget):
         footer.setStyleSheet("""
             QFrame {
                 background:#1b1b1b;
-                border-radius:12px;
+                border-radius:10px;
             }
         """)
         f = QHBoxLayout(footer)
@@ -311,8 +311,8 @@ class LabPage(QWidget):
 
             grid = QGridLayout()
 
-            grid.setHorizontalSpacing(14)
-            grid.setVerticalSpacing(20)
+            grid.setHorizontalSpacing(5)
+            grid.setVerticalSpacing(15)
 
             grid.setContentsMargins(12, 12, 12, 12)
 
@@ -326,7 +326,7 @@ class LabPage(QWidget):
             card = PcCard(pc["name"], pc["ip"])
 
             
-            card.setFixedSize(70, 70)
+            card.setFixedSize(60, 60)
 
             card.toggled.connect(self._on_toggle)
             card.delete_requested.connect(lambda ip=pc["ip"]: self._unselect_pc(ip))

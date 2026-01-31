@@ -18,7 +18,7 @@ class PcCard(QFrame):
     toggled = Signal(str, bool)
     delete_requested = Signal(str)
 
-    def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc.png"):
+    def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc1.png"):
         super().__init__()
         self.ip = ip
         self.selected = False
@@ -66,7 +66,7 @@ class PcCard(QFrame):
         pm = QPixmap(_abs_asset_path(icon_rel_path))
         if not pm.isNull():
             self.icon.setPixmap(
-                pm.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pm.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
         else:
             self.icon.setText("PC")
