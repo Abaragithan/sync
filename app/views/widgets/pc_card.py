@@ -1,95 +1,88 @@
 import os
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap, QPainter, QColor
 
 
 def _abs_asset_path(rel_path: str) -> str:
-    """
-    Build absolute path from this file location.
-    This avoids 'working directory' problems.
-    """
-    base = os.path.dirname(os.path.abspath(__file__))  
+    base = os.path.dirname(os.path.abspath(__file__))
     app_dir = os.path.abspath(os.path.join(base, "..", ".."))
     return os.path.join(app_dir, rel_path)
 
 
 class PcCard(QFrame):
     toggled = Signal(str, bool)
-    delete_requested = Signal(str)
+    delete_requested = Signal(str)  # keep for compatibility with your lab_page.py
 
-    def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc1.png"):
+    NORMAL_COLOR = "#9F9F9F"
+    SELECTED_COLOR = "#007acc"
+
+    def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc2.png"):
         super().__init__()
+
         self.ip = ip
         self.selected = False
+        self.icon_rel_path = icon_rel_path
 
-        self.setFixedSize(64, 64)
+        self.setFixedSize(48, 56)
+        self.setToolTip(f"{name}\n{ip}")
+        self.setStyleSheet("background: transparent; border: none;")
 
-        self.setObjectName("PcCard")
+        self._build_ui(name)
+        self._load_icon()
 
-        # 🔹 Added QToolTip styling ONLY
-        self.setStyleSheet("""
-            QFrame#PcCard {
-                background: #1b1b1b;
-                border: 1px solid #2a2a2a;
-                border-radius: 10px;
-            }
-            QFrame#PcCard[selected="true"] {
-                border: 2px solid #007acc;
-                background: #1e2a33;
-            }
-            QToolTip {
-                background-color: #020617;
-                color: #ffffff;          /* ✅ WHITE TEXT */
-                border: 1px solid #334155;
-                padding: 6px;
-                border-radius: 6px;
-                font-size: 12px;
-            }
-        """)
-
-        self.setProperty("selected", False)
-        self._build_ui(name, ip, icon_rel_path)
-
-    def _build_ui(self, name: str, ip: str, icon_rel_path: str):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
-        root.setSpacing(0)
-
-        top = QHBoxLayout()
-        top.setContentsMargins(0, 0, 0, 0)
-        top.addStretch()
+    def _build_ui(self, name: str):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
 
         self.icon = QLabel()
         self.icon.setAlignment(Qt.AlignCenter)
 
-        pm = QPixmap(_abs_asset_path(icon_rel_path))
-        if not pm.isNull():
-            self.icon.setPixmap(
-                pm.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-        else:
+        self.name_lbl = QLabel(name)
+        self.name_lbl.setAlignment(Qt.AlignCenter)
+        self.name_lbl.setStyleSheet(
+            f"color:{self.NORMAL_COLOR}; font-size:9px; font-weight:600;"
+        )
+
+        layout.addWidget(self.icon, 1)
+        layout.addWidget(self.name_lbl)
+
+    def _load_icon(self):
+        self.base_pm = QPixmap(_abs_asset_path(self.icon_rel_path))
+        if self.base_pm.isNull():
             self.icon.setText("PC")
-            self.icon.setStyleSheet("color: #555; font-weight: 700; font-size: 12px;")
+            self.icon.setStyleSheet(f"color:{self.NORMAL_COLOR}; font-weight:700;")
+            return
 
-        name_lbl = QLabel(name)
-        name_lbl.setAlignment(Qt.AlignCenter)
-        name_lbl.setStyleSheet("color:#ddd; font-size: 9px; font-weight: 600;")
+        self._apply_icon_color(self.NORMAL_COLOR)
 
-        root.addLayout(top)
-        root.addWidget(self.icon, 1, Qt.AlignCenter)
-        root.addWidget(name_lbl)
+    def _apply_icon_color(self, color_hex: str):
+        tinted = QPixmap(self.base_pm.size())
+        tinted.fill(Qt.transparent)
 
-       
-        self.setToolTip(f"{name}\n{ip}")
+        painter = QPainter(tinted)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.drawPixmap(0, 0, self.base_pm)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(tinted.rect(), QColor(color_hex))
+        painter.end()
 
-    def mousePressEvent(self, e):
-        super().mousePressEvent(e)
+        self.icon.setPixmap(
+            tinted.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+
+    def mousePressEvent(self, event):
         self.set_selected(not self.selected)
+        super().mousePressEvent(event)
 
     def set_selected(self, value: bool):
         self.selected = value
-        self.setProperty("selected", value)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        color = self.SELECTED_COLOR if value else self.NORMAL_COLOR
+        if hasattr(self, "base_pm") and self.base_pm and not self.base_pm.isNull():
+            self._apply_icon_color(color)
         self.toggled.emit(self.ip, value)
+
+    # Optional helper if later you add a delete button / context menu
+    def request_delete(self):
+        self.delete_requested.emit(self.ip)
