@@ -30,6 +30,7 @@ class PcCard(QFrame):
 
         self._build_ui(name)
         self._load_icon()
+        
 
     def _build_ui(self, name: str):
         layout = QVBoxLayout(self)

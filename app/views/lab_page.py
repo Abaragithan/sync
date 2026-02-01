@@ -132,6 +132,10 @@ class LabComboBox(QComboBox):
 
 
 class LabPage(QWidget):
+    # ---------------------------------------------------------
+    # FIXED: Added the missing back_requested signal here
+    # ---------------------------------------------------------
+    back_requested = Signal()
     next_to_software = Signal()
     edit_lab_requested = Signal(str)
 
@@ -152,10 +156,26 @@ class LabPage(QWidget):
         root.setContentsMargins(15, 15, 15, 15)
         root.setSpacing(4)
 
+        # ---------------------------------------------------------
+        # FIXED: Created header_layout and arranged Back Button + Title
+        # ---------------------------------------------------------
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(10)
+
+        self.back_btn = QPushButton("← Back")
+        self.back_btn.setObjectName("SecondaryBtn")
+        self.back_btn.setFixedWidth(85)
+        self.back_btn.clicked.connect(self.back_requested.emit)
+        header_layout.addWidget(self.back_btn)
+
         title = QLabel("Lab Deployment")
         title.setStyleSheet("font-size:26px; font-weight:800;")
-        root.addWidget(title)
+        header_layout.addWidget(title)
+        
+        header_layout.addStretch() # Pushes title to the left
+        root.addLayout(header_layout)
 
+        # --- Controls Row ---
         controls = QHBoxLayout()
         controls.setSpacing(5)
 
@@ -188,6 +208,7 @@ class LabPage(QWidget):
 
         root.addLayout(controls)
 
+        # --- Scroll Area ---
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
@@ -202,6 +223,7 @@ class LabPage(QWidget):
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
 
+        # --- Footer ---
         footer = QFrame()
         footer.setStyleSheet("""
             QFrame {

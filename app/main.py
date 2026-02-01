@@ -8,7 +8,8 @@ from ui.theme import APP_QSS
 from views.welcome_page import WelcomePage
 from views.lab_page import LabPage
 from views.software_page import SoftwarePage
-from views.lab_edit_page import LabEditPage   # ✅ NEW (only addition)
+from views.lab_edit_page import LabEditPage
+from views.dashboard_page import DashboardPage
 
 
 class MainWindow(QMainWindow):
@@ -23,26 +24,44 @@ class MainWindow(QMainWindow):
         # -------- Stack --------
         self.stack = QStackedWidget()
 
+        # 1. Initialize All Pages
         self.welcome = WelcomePage()
+        self.dashboard = DashboardPage(self.inventory_manager)
         self.lab = LabPage(self.inventory_manager, self.state)
         self.software = SoftwarePage(self.inventory_manager, self.state)
-
-        # ✅ NEW: Lab Edit page
         self.lab_edit = LabEditPage(self.inventory_manager)
 
-        # Order matters
-        self.stack.addWidget(self.welcome)   # index 0
-        self.stack.addWidget(self.lab)       # index 1
-        self.stack.addWidget(self.software)  # index 2
-        self.stack.addWidget(self.lab_edit)  # index 3
+        # 2. Add to Stack (Order Matters!)
+        self.stack.addWidget(self.welcome)   # Index 0
+        self.stack.addWidget(self.dashboard) # Index 1
+        self.stack.addWidget(self.lab)       # Index 2
+        self.stack.addWidget(self.software)  # Index 3
+        self.stack.addWidget(self.lab_edit)  # Index 4
 
         # -------- Navigation --------
+        
+        # Welcome (0) -> Dashboard (1)
         self.welcome.go_deployment.connect(lambda: self.stack.setCurrentIndex(1))
 
-        self.lab.next_to_software.connect(self._go_software)
-        self.software.back_to_lab.connect(lambda: self.stack.setCurrentIndex(1))
+        # Dashboard (1) -> Welcome (0) (Back Button)
+        self.dashboard.back_requested.connect(lambda: self.stack.setCurrentIndex(0))
 
-        # ✏ Edit lab navigation (ONLY new wiring)
+        # Dashboard (1) -> Lab (2) via handler
+        self.dashboard.lab_selected.connect(self._handle_lab_selection)
+
+        # Lab (2) -> Dashboard (1) (Back Button)
+        self.lab.back_requested.connect(lambda: self.stack.setCurrentIndex(1))
+
+        # Dashboard (1) -> Lab Edit (4)
+        self.dashboard.edit_lab_requested.connect(self._go_lab_edit)
+
+        # Lab (2) -> Software (3)
+        self.lab.next_to_software.connect(self._go_software)
+
+        # Software (3) -> Lab (2)
+        self.software.back_to_lab.connect(lambda: self.stack.setCurrentIndex(2))
+
+        # Lab (2) <-> Lab Edit (4)
         self.lab.edit_lab_requested.connect(self._go_lab_edit)
         self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
 
@@ -54,19 +73,28 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(w)
 
     def _go_software(self):
-        self.stack.setCurrentIndex(2)
+        self.stack.setCurrentIndex(3)
         self.software.on_page_show()
 
     def _go_lab_edit(self, lab_name: str):
         print(f"[NAV] Edit lab requested: {lab_name}")
         self.lab_edit.load_lab(lab_name)
-        self.stack.setCurrentIndex(3)
+        self.stack.setCurrentIndex(4)
 
     def _back_from_lab_edit(self):
         # Force LabPage to refresh from inventory
         self.lab._render_lab()
-        self.stack.setCurrentIndex(1)
+        self.stack.setCurrentIndex(2)
 
+    def _handle_lab_selection(self, lab_name: str):
+        """
+        Called when user clicks 'Open' on the Dashboard.
+        """
+        # Use the existing method _on_lab_changed to load data
+        self.lab._on_lab_changed(lab_name)
+        
+        # Switch to Lab Page (Index 2)
+        self.stack.setCurrentIndex(2)
 
 
 def main():
