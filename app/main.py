@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 
 from core.inventory_manager import InventoryManager
 from core.app_state import AppState
-from ui.theme import APP_QSS
+from ui.theme import get_qss
 
 from views.welcome_page import WelcomePage
 from views.lab_page import LabPage
@@ -65,6 +65,10 @@ class MainWindow(QMainWindow):
         self.lab.edit_lab_requested.connect(self._go_lab_edit)
         self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
 
+        # Theme toggle (LabPage -> App stylesheet)
+        self.lab.theme_toggled.connect(self._apply_theme)
+
+
         # -------- Central widget --------
         w = QWidget()
         lay = QVBoxLayout(w)
@@ -97,10 +101,19 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(2)
 
 
+    def _apply_theme(self, theme: str):
+        theme = (theme or "dark").lower()
+        self.state.theme = theme
+        QApplication.instance().setStyleSheet(get_qss(theme))
+
+
+
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(APP_QSS)
+    from ui.theme import get_qss
+   # app.setStyleSheet(get_qss("dark"))  # or state.theme
     win = MainWindow()
+    app.setStyleSheet(get_qss(win.state.theme))
     win.show()
     sys.exit(app.exec())
 

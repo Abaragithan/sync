@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
     QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
-    QStyledItemDelegate, QListView, QStyleOptionViewItem
+    QStyledItemDelegate, QListView, QStyleOptionViewItem, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt, QRect, QSize, QEvent
 from PySide6.QtGui import QPainter, QColor
@@ -132,17 +132,19 @@ class LabComboBox(QComboBox):
 
 
 class LabPage(QWidget):
-    # ---------------------------------------------------------
-    # FIXED: Added the missing back_requested signal here
-    # ---------------------------------------------------------
     back_requested = Signal()
     next_to_software = Signal()
     edit_lab_requested = Signal(str)
+    theme_toggled = Signal(str)  # "dark" or "light"
 
     def __init__(self, inventory_manager, state):
         super().__init__()
         self.inventory_manager = inventory_manager
         self.state = state
+
+        # FIX: ensure selected_targets exists without touching AppState
+        if not hasattr(self.state, "selected_targets") or self.state.selected_targets is None:
+            self.state.selected_targets = []
 
         self.cards_by_ip = {}
         self.part_frames = []
@@ -156,9 +158,7 @@ class LabPage(QWidget):
         root.setContentsMargins(15, 15, 15, 15)
         root.setSpacing(4)
 
-        # ---------------------------------------------------------
-        # FIXED: Created header_layout and arranged Back Button + Title
-        # ---------------------------------------------------------
+        # --- Header ---
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
 
@@ -171,13 +171,18 @@ class LabPage(QWidget):
         title = QLabel("Lab Deployment")
         title.setStyleSheet("font-size:26px; font-weight:800;")
         header_layout.addWidget(title)
-        
-        header_layout.addStretch() # Pushes title to the left
+
+        header_layout.addStretch()
         root.addLayout(header_layout)
 
         # --- Controls Row ---
         controls = QHBoxLayout()
         controls.setSpacing(5)
+
+        self.theme_switch = QCheckBox("Light")
+        self.theme_switch.setChecked(self.state.theme == "light")
+        self.theme_switch.stateChanged.connect(self._toggle_theme)
+        controls.addWidget(self.theme_switch)
 
         controls.addWidget(QLabel("Lab:"))
 
@@ -202,6 +207,8 @@ class LabPage(QWidget):
         self.create_lab_btn.clicked.connect(self._create_lab)
         controls.addWidget(self.create_lab_btn)
 
+        controls.addSpacing(12)  # ✅ more space between the buttons
+
         self.select_btn = QPushButton("Select PCs")
         self.select_btn.clicked.connect(self._open_select_menu)
         controls.addWidget(self.select_btn)
@@ -215,8 +222,7 @@ class LabPage(QWidget):
 
         self.wrap = QWidget()
         self.wrap_layout = QHBoxLayout(self.wrap)
-
-        self.wrap_layout.setSpacing(10)                
+        self.wrap_layout.setSpacing(16)  # ✅ slightly more spacing between sections
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
         self.wrap_layout.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
 
@@ -225,22 +231,15 @@ class LabPage(QWidget):
 
         # --- Footer ---
         footer = QFrame()
-        footer.setStyleSheet("""
-            QFrame {
-                background:#1b1b1b;
-                border-radius:10px;
-            }
-        """)
+        footer.setObjectName("FooterBar")
         f = QHBoxLayout(footer)
 
         self.count_lbl = QLabel("No PCs selected")
-        self.count_lbl.setStyleSheet("color:#ff6b6b;")
         f.addWidget(self.count_lbl)
 
         f.addStretch()
 
         self.target_os_lbl = QLabel("Target OS: WINDOWS")
-        self.target_os_lbl.setStyleSheet("color:#9aa4b2;")
         f.addWidget(self.target_os_lbl)
 
         self.next_btn = QPushButton("Next → Software")
@@ -316,26 +315,26 @@ class LabPage(QWidget):
         if not layout or not pcs:
             return
 
+        # ✅ Add stretch before frames to center them horizontally
+        self.wrap_layout.addStretch(1)
+
         for s in range(layout["sections"]):
             frame = QFrame()
-            frame.setStyleSheet("background:#1b1b1b; border-radius:12px;")
+            frame.setObjectName("SectionCard")
 
             v = QVBoxLayout(frame)
-
             v.setContentsMargins(10, 10, 10, 10)
             v.setSpacing(12)
             v.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
             label = QLabel(f"Section {s+1}")
-            label.setStyleSheet("font-weight:700;")
+            label.setObjectName("SectionTitle")
             label.setAlignment(Qt.AlignLeft)
             v.addWidget(label)
 
             grid = QGridLayout()
-
             grid.setHorizontalSpacing(5)
             grid.setVerticalSpacing(15)
-
             grid.setContentsMargins(12, 12, 12, 12)
 
             v.addLayout(grid)
@@ -344,10 +343,11 @@ class LabPage(QWidget):
             self.part_grids.append(grid)
             self.wrap_layout.addWidget(frame)
 
+        # ✅ Add stretch after frames to center them horizontally
+        self.wrap_layout.addStretch(1)
+
         for pc in pcs:
             card = PcCard(pc["name"], pc["ip"])
-
-            
             card.setFixedSize(60, 60)
 
             card.toggled.connect(self._on_toggle)
@@ -378,7 +378,7 @@ class LabPage(QWidget):
             for card in self.cards_by_ip.values():
                 card.set_selected(False)
             self.state.selected_targets.clear()
-        
+
         self._update_footer()
 
     def _unselect_pc(self, ip):
@@ -442,3 +442,7 @@ class LabPage(QWidget):
 
     def _update_os_label(self):
         self.target_os_lbl.setText(f"Target OS: {self.state.target_os.upper()}")
+
+    def _toggle_theme(self):
+        new_theme = "light" if self.theme_switch.isChecked() else "dark"
+        self.theme_toggled.emit(new_theme)
