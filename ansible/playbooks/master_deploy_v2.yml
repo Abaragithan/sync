@@ -110,5 +110,5 @@
             name: "{{ package_name }}"
             state: "{{ app_state }}"
             update_cache: yes
-          become: yes
+      become: yes
       when: ansible_facts["os_family"] == "Debian"
