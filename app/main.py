@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
 
         self.inventory_manager = InventoryManager()
         self.state = AppState()
+        self.state.load()
 
         # -------- Stack --------
         self.stack = QStackedWidget()
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, theme: str):
         theme = (theme or "dark").lower()
         self.state.theme = theme
+        self.state.save()
         QApplication.instance().setStyleSheet(get_qss(theme))
 
 

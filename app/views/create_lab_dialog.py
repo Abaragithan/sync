@@ -1,7 +1,7 @@
 import ipaddress
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QSpinBox, QPushButton, QFrame, QMessageBox
+    QSpinBox, QPushButton, QFrame, QMessageBox, QGridLayout
 )
 from PySide6.QtCore import Qt
 
@@ -35,9 +35,11 @@ class CreateLabDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Create Lab")
         self.setModal(True)
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(560)
 
-        # ✅ cache generated data so get_data() cannot fail later
+        
+        self.setObjectName("CreateLabDialog")
+
         self._cached_ips: list[str] = []
         self._cached_layout: dict | None = None
         self._cached_name: str = ""
@@ -46,86 +48,124 @@ class CreateLabDialog(QDialog):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(22, 22, 22, 18)
+        root.setSpacing(14)
 
+        
         title = QLabel("Create Lab Structure")
-        title.setStyleSheet("font-size:18px; font-weight:800;")
+        title.setObjectName("DialogTitle")
         root.addWidget(title)
 
+        subtitle = QLabel("Define sections, layout size, and an IP range for automatic assignment.")
+        subtitle.setObjectName("DialogSubText")
+        subtitle.setWordWrap(True)
+        root.addWidget(subtitle)
+
         card = QFrame()
-        card.setObjectName("Card")
-        card.setStyleSheet("""
-            QFrame#Card { background:#1b1b1b; border:1px solid #2a2a2a; border-radius:12px; }
-            QLabel { color: #cbd5e1; }
-        """)
-        lay = QVBoxLayout(card)
-        lay.setContentsMargins(14, 14, 14, 14)
-        lay.setSpacing(10)
+        card.setObjectName("DialogCard")
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(16, 16, 16, 16)
+        card_lay.setSpacing(14)
 
-        # Lab name
-        r1 = QHBoxLayout()
-        r1.addWidget(QLabel("Lab name:"))
+        lab_title = QLabel("Lab Info")
+        lab_title.setObjectName("DialogSectionHeader")
+        card_lay.addWidget(lab_title)
+
+        name_grid = QGridLayout()
+        name_grid.setHorizontalSpacing(12)
+        name_grid.setVerticalSpacing(10)
+
+        lbl_name = QLabel("Lab name")
+        lbl_name.setObjectName("DialogFieldLabel")
         self.lab_name = QLineEdit()
-        self.lab_name.setPlaceholderText("e.g., CSL 1&2")
-        r1.addWidget(self.lab_name, 1)
-        lay.addLayout(r1)
+        self.lab_name.setPlaceholderText("e.g., CSL 1 & 2")
+        self.lab_name.setObjectName("DialogInput")
 
-        # Layout
-        r2 = QHBoxLayout()
-        r2.addWidget(QLabel("Sections:"))
+        name_grid.addWidget(lbl_name, 0, 0)
+        name_grid.addWidget(self.lab_name, 0, 1)
+        card_lay.addLayout(name_grid)
+
+       
+        layout_title = QLabel("Layout")
+        layout_title.setObjectName("DialogSectionHeader")
+        card_lay.addWidget(layout_title)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(10)
+
         self.sections = QSpinBox()
         self.sections.setRange(1, 10)
         self.sections.setValue(3)
-        r2.addWidget(self.sections)
+        self.sections.setObjectName("DialogSpin")
 
-        r2.addSpacing(10)
-        r2.addWidget(QLabel("Rows/section:"))
         self.rows = QSpinBox()
         self.rows.setRange(1, 30)
         self.rows.setValue(7)
-        r2.addWidget(self.rows)
+        self.rows.setObjectName("DialogSpin")
 
-        r2.addSpacing(10)
-        r2.addWidget(QLabel("Cols/section:"))
         self.cols = QSpinBox()
         self.cols.setRange(1, 30)
         self.cols.setValue(5)
-        r2.addWidget(self.cols)
+        self.cols.setObjectName("DialogSpin")
 
-        r2.addStretch()
-        lay.addLayout(r2)
+        grid.addWidget(QLabel("Sections"), 0, 0)
+        grid.addWidget(self.sections, 0, 1)
 
-        # IP assignment
-        r3 = QHBoxLayout()
-        r3.addWidget(QLabel("Start IP:"))
+        grid.addWidget(QLabel("Rows / section"), 0, 2)
+        grid.addWidget(self.rows, 0, 3)
+
+        grid.addWidget(QLabel("Cols / section"), 0, 4)
+        grid.addWidget(self.cols, 0, 5)
+
+     
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        grid.setColumnStretch(5, 1)
+
+        card_lay.addLayout(grid)
+
+        ip_title = QLabel("IP Range")
+        ip_title.setObjectName("DialogSectionHeader")
+        card_lay.addWidget(ip_title)
+
+        ip_grid = QGridLayout()
+        ip_grid.setHorizontalSpacing(12)
+        ip_grid.setVerticalSpacing(10)
+
         self.start_ip = QLineEdit()
         self.start_ip.setPlaceholderText("192.168.1.10")
-        r3.addWidget(self.start_ip, 1)
-        lay.addLayout(r3)
+        self.start_ip.setObjectName("DialogInput")
 
-        r4 = QHBoxLayout()
-        r4.addWidget(QLabel("End IP:"))
         self.end_ip = QLineEdit()
         self.end_ip.setPlaceholderText("192.168.1.200")
-        r4.addWidget(self.end_ip, 1)
-        lay.addLayout(r4)
+        self.end_ip.setObjectName("DialogInput")
 
+        ip_grid.addWidget(QLabel("Start IP"), 0, 0)
+        ip_grid.addWidget(self.start_ip, 0, 1)
+        ip_grid.addWidget(QLabel("End IP"), 1, 0)
+        ip_grid.addWidget(self.end_ip, 1, 1)
+
+        card_lay.addLayout(ip_grid)
+
+       
         self.preview = QLabel("")
-        self.preview.setStyleSheet("color:#9aa4b2;")
-        lay.addWidget(self.preview)
+        self.preview.setObjectName("DialogHintText")
+        card_lay.addWidget(self.preview)
 
         root.addWidget(card)
 
-        # Buttons
         btns = QHBoxLayout()
+        btns.setSpacing(10)
+
         btns.addStretch()
 
         cancel = QPushButton("Cancel")
-        cancel.setStyleSheet("background:#2a2a2a;")
+        cancel.setObjectName("SecondaryBtn")
         cancel.clicked.connect(self.reject)
 
         create = QPushButton("Create Lab")
+        create.setObjectName("PrimaryBtn")
         create.clicked.connect(self._validate_and_accept)
 
         btns.addWidget(cancel)
@@ -168,7 +208,6 @@ class CreateLabDialog(QDialog):
             QMessageBox.critical(self, "Invalid IP Range", str(e))
             return
 
-        # ✅ cache once (prevents get_data() from failing later)
         self._cached_name = name
         self._cached_layout = layout
         self._cached_ips = ips
@@ -176,10 +215,6 @@ class CreateLabDialog(QDialog):
         self.accept()
 
     def get_data(self) -> dict:
-        """
-        Return cached values generated during _validate_and_accept().
-        If get_data() is called without accept(), we fallback to computing (safe).
-        """
         if self._cached_layout and self._cached_ips and self._cached_name:
             return {
                 "lab_name": self._cached_name,
@@ -187,7 +222,6 @@ class CreateLabDialog(QDialog):
                 "ips": self._cached_ips,
             }
 
-        # Fallback (shouldn't happen if dialog accepted properly)
         total = self.sections.value() * self.rows.value() * self.cols.value()
         ips = _generate_ips(self.start_ip.text(), self.end_ip.text(), total)
         return {

@@ -12,11 +12,6 @@ from .create_lab_dialog import CreateLabDialog
 
 
 class LabComboDelegate(QStyledItemDelegate):
-    """
-    Paint each popup row as:
-        Lab name .......... ✏ 🗑
-    with explicit colors so it stays visible under dark themes.
-    """
     def __init__(self, combo: "LabComboBox"):
         super().__init__(combo)
         self.combo = combo
@@ -135,14 +130,13 @@ class LabPage(QWidget):
     back_requested = Signal()
     next_to_software = Signal()
     edit_lab_requested = Signal(str)
-    theme_toggled = Signal(str)  # "dark" or "light"
+    theme_toggled = Signal(str)
 
     def __init__(self, inventory_manager, state):
         super().__init__()
         self.inventory_manager = inventory_manager
         self.state = state
 
-        # FIX: ensure selected_targets exists without touching AppState
         if not hasattr(self.state, "selected_targets") or self.state.selected_targets is None:
             self.state.selected_targets = []
 
@@ -158,7 +152,7 @@ class LabPage(QWidget):
         root.setContentsMargins(15, 15, 15, 15)
         root.setSpacing(4)
 
-        # --- Header ---
+   
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
 
@@ -207,7 +201,7 @@ class LabPage(QWidget):
         self.create_lab_btn.clicked.connect(self._create_lab)
         controls.addWidget(self.create_lab_btn)
 
-        controls.addSpacing(12)  # ✅ more space between the buttons
+        controls.addSpacing(12)
 
         self.select_btn = QPushButton("Select PCs")
         self.select_btn.clicked.connect(self._open_select_menu)
@@ -220,16 +214,29 @@ class LabPage(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
 
+        # ✅ Outer container for vertical centering
         self.wrap = QWidget()
-        self.wrap_layout = QHBoxLayout(self.wrap)
-        self.wrap_layout.setSpacing(16)  # ✅ slightly more spacing between sections
+        outer = QVBoxLayout(self.wrap)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        outer.addStretch(1)  
+
+       
+        row_holder = QWidget()
+        self.wrap_layout = QHBoxLayout(row_holder)
+        self.wrap_layout.setSpacing(16)
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
-        self.wrap_layout.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self.wrap_layout.setAlignment(Qt.AlignHCenter)  
+
+        outer.addWidget(row_holder, 0, Qt.AlignHCenter)
+
+        outer.addStretch(1) 
 
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
 
-        # --- Footer ---
+       
         footer = QFrame()
         footer.setObjectName("FooterBar")
         f = QHBoxLayout(footer)
@@ -315,7 +322,7 @@ class LabPage(QWidget):
         if not layout or not pcs:
             return
 
-        # ✅ Add stretch before frames to center them horizontally
+        
         self.wrap_layout.addStretch(1)
 
         for s in range(layout["sections"]):
@@ -343,7 +350,6 @@ class LabPage(QWidget):
             self.part_grids.append(grid)
             self.wrap_layout.addWidget(frame)
 
-        # ✅ Add stretch after frames to center them horizontally
         self.wrap_layout.addStretch(1)
 
         for pc in pcs:

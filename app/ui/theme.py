@@ -22,6 +22,10 @@ QLabel#SubText {
     font-size: 13px;
 }
 
+QLabel#MutedText {
+    color: #9aa4b2;
+}
+
 /* --- DASHBOARD CARD SPECIFIC --- */
 QFrame#DashboardCard {
     background-color: #1e293b;
@@ -96,7 +100,7 @@ QLineEdit, QComboBox, QSpinBox, QTextEdit {
     color: white;
     selection-background-color: #3b82f6;
 }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus {
     border: 1px solid #3b82f6;
 }
 
@@ -120,7 +124,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
 
-/* --- LIST WIDGET (For Edit Page) --- */
+/* --- LIST WIDGET --- */
 QListWidget {
     background-color: #0f172a;
     border: 1px solid #334155;
@@ -149,8 +153,7 @@ QToolTip {
     font-size: 12px;
 }
 
-
-/* --- LAB PAGE SECTION CARDS --- */
+/* --- LAB PAGE --- */
 QFrame#SectionCard {
     background-color: #1b1b1b;
     border: 1px solid #334155;
@@ -162,35 +165,93 @@ QLabel#SectionTitle {
     color: #e2e8f0;
 }
 
-/* --- LAB FOOTER --- */
 QFrame#FooterBar {
     background-color: #1b1b1b;
     border-radius: 10px;
     border: 1px solid #334155;
 }
 
-QLabel#FooterAlertText {
-    color: #ff6b6b;
+/* --- WELCOME PAGE (NO BORDER) --- */
+QFrame#WelcomeCard {
+    background-color: transparent;
+    border: none;
+    border-radius: 16px;
 }
 
-QLabel#FooterMutedText {
+QLabel#WelcomeTitle {
+    font-size: 44px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+QLabel#WelcomeSub {
     color: #9aa4b2;
+    font-size: 14px;
 }
 
-/* --- LAB: SECTION CARDS --- */
-QFrame#SectionCard {
-    background-color: #1b1b1b;
+QLabel#WelcomeLogoFallback {
+    font-size: 24px;
+    font-weight: 800;
+    color: #94a3b8;
+}
+
+/* --- SOFTWARE PAGE (SCOPED) --- */
+QWidget#SoftwarePage QFrame#Card {
+    background-color: #111827;
     border: 1px solid #334155;
     border-radius: 12px;
+    padding: 10px;
 }
 
-QLabel#SectionTitle {
-    font-weight: 700;
-    color: #e2e8f0;
+QWidget#SoftwarePage QLabel#CardHeader {
+    font-weight: 800;
+    font-size: 15px;
+    color: #e5e7eb;
+    padding: 6px 2px;
 }
 
+QWidget#SoftwarePage QLabel#SummaryText {
+    color: #e5e7eb;
+}
 
+QWidget#SoftwarePage QLabel#StatusError { color: #ff6b6b; }
+QWidget#SoftwarePage QLabel#StatusSuccess { color: #4ecdc4; }
+
+QWidget#SoftwarePage QTextEdit#Console {
+    background-color: #0b1220;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 8px;
+    color: #e5e7eb;
+}
+
+/* --- CREATE LAB DIALOG --- */
+QDialog#CreateLabDialog QLabel#DialogTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: #ffffff;
+}
+QDialog#CreateLabDialog QLabel#DialogSubText {
+    color: #94a3b8;
+    font-size: 12px;
+}
+QDialog#CreateLabDialog QFrame#DialogCard {
+    background-color: #111827;
+    border: 1px solid #334155;
+    border-radius: 14px;
+}
+QDialog#CreateLabDialog QLabel#DialogSectionHeader {
+    font-weight: 800;
+    font-size: 13px;
+    color: #e5e7eb;
+    padding-top: 4px;
+}
+QDialog#CreateLabDialog QLabel#DialogHintText {
+    color: #9aa4b2;
+    font-size: 12px;
+}
 """
+
 
 LIGHT_QSS = """
 /* --- GLOBAL & BASE --- */
@@ -212,6 +273,10 @@ QLabel#PageTitle {
 QLabel#SubText {
     color: #475569;
     font-size: 13px;
+}
+
+QLabel#MutedText {
+    color: #475569;
 }
 
 /* --- DASHBOARD CARD SPECIFIC --- */
@@ -287,7 +352,7 @@ QLineEdit, QComboBox, QSpinBox, QTextEdit {
     color: #0f172a;
     selection-background-color: #3b82f6;
 }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus {
     border: 1px solid #2563eb;
 }
 
@@ -314,7 +379,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
 
-/* --- LIST WIDGET (For Edit Page) --- */
+/* --- LIST WIDGET --- */
 QListWidget {
     background-color: #ffffff;
     border: 1px solid #cbd5e1;
@@ -343,7 +408,7 @@ QToolTip {
     font-size: 12px;
 }
 
-/* --- LAB PAGE SECTION CARDS --- */
+/* --- LAB PAGE --- */
 QFrame#SectionCard {
     background-color: #ffffff;
     border: 1px solid #cbd5e1;
@@ -355,37 +420,93 @@ QLabel#SectionTitle {
     color: #0f172a;
 }
 
-/* --- LAB FOOTER --- */
 QFrame#FooterBar {
     background-color: #ffffff;
     border-radius: 10px;
     border: 1px solid #cbd5e1;
 }
 
-QLabel#FooterAlertText {
-    color: #dc2626;
+/* --- WELCOME PAGE (NO BORDER) --- */
+QFrame#WelcomeCard {
+    background-color: transparent;
+    border: none;
+    border-radius: 16px;
 }
 
-QLabel#FooterMutedText {
-    color: #475569;
-}
-
-/* --- LAB: SECTION CARDS --- */
-QFrame#SectionCard {
-    background-color: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-}
-
-QLabel#SectionTitle {
-    font-weight: 700;
+QLabel#WelcomeTitle {
+    font-size: 44px;
+    font-weight: 800;
     color: #0f172a;
 }
 
+QLabel#WelcomeSub {
+    color: #475569;
+    font-size: 14px;
+}
+
+QLabel#WelcomeLogoFallback {
+    font-size: 24px;
+    font-weight: 800;
+    color: #64748b;
+}
+
+/* --- SOFTWARE PAGE (SCOPED) --- */
+QWidget#SoftwarePage QFrame#Card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px;
+}
+
+QWidget#SoftwarePage QLabel#CardHeader {
+    font-weight: 800;
+    font-size: 15px;
+    color: #0f172a;
+    padding: 6px 2px;
+}
+
+QWidget#SoftwarePage QLabel#SummaryText {
+    color: #0f172a;
+}
+
+QWidget#SoftwarePage QLabel#StatusError { color: #dc2626; }
+QWidget#SoftwarePage QLabel#StatusSuccess { color: #0f766e; }
+
+QWidget#SoftwarePage QTextEdit#Console {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 8px;
+    color: #0f172a;
+}
+
+/* --- CREATE LAB DIALOG --- */
+QDialog#CreateLabDialog QLabel#DialogTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+}
+QDialog#CreateLabDialog QLabel#DialogSubText {
+    color: #475569;
+    font-size: 12px;
+}
+QDialog#CreateLabDialog QFrame#DialogCard {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+}
+QDialog#CreateLabDialog QLabel#DialogSectionHeader {
+    font-weight: 800;
+    font-size: 13px;
+    color: #0f172a;
+    padding-top: 4px;
+}
+QDialog#CreateLabDialog QLabel#DialogHintText {
+    color: #475569;
+    font-size: 12px;
+}
 """
 
+
 def get_qss(theme_name: str) -> str:
-    """
-    theme_name: "dark" or "light"
-    """
     return LIGHT_QSS if (theme_name or "").lower() == "light" else DARK_QSS
