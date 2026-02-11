@@ -32,6 +32,9 @@ class MainWindow(QMainWindow):
         self.software = SoftwarePage(self.inventory_manager, self.state)
         self.lab_edit = LabEditPage(self.inventory_manager)
 
+        self.dashboard = DashboardPage(self.inventory_manager, self.state)
+
+
         # 2. Add to Stack (Order Matters!)
         self.stack.addWidget(self.welcome)   # Index 0
         self.stack.addWidget(self.dashboard) # Index 1
@@ -67,7 +70,9 @@ class MainWindow(QMainWindow):
         self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
 
         # Theme toggle (LabPage -> App stylesheet)
-        self.lab.theme_toggled.connect(self._apply_theme)
+        self.dashboard.theme_toggled.connect(self._apply_theme)
+
+        #self.lab.theme_toggled.connect(self._apply_theme)
 
 
         # -------- Central widget --------

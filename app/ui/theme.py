@@ -10,6 +10,38 @@ QWidget {
     border: none;
 }
 
+/* =============================== */
+/* ===== THEME SWITCH (DARK) ===== */
+/* =============================== */
+QCheckBox#ThemeSwitch {
+    spacing: 10px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+QCheckBox#ThemeSwitch::indicator {
+    width: 46px;
+    height: 24px;
+    border-radius: 12px;
+    background: #334155;
+    border: 1px solid #475569;
+}
+
+QCheckBox#ThemeSwitch::indicator:checked {
+    background: #2563eb;
+    border: 1px solid #1d4ed8;
+}
+
+/* Make it feel like a switch (thumb illusion using inset) */
+QCheckBox#ThemeSwitch::indicator {
+    padding: 2px;
+}
+
+QCheckBox#ThemeSwitch:hover::indicator {
+    border: 1px solid #64748b;
+}
+
+
 /* --- PAGE TITLES & TEXT --- */
 QLabel#PageTitle {
     font-size: 28px;
@@ -262,6 +294,37 @@ QWidget {
     font-size: 14px;
     border: none;
 }
+
+/* ================================ */
+/* ===== THEME SWITCH (LIGHT) ===== */
+/* ================================ */
+QCheckBox#ThemeSwitch {
+    spacing: 10px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+QCheckBox#ThemeSwitch::indicator {
+    width: 46px;
+    height: 24px;
+    border-radius: 12px;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+}
+
+QCheckBox#ThemeSwitch::indicator:checked {
+    background: #2563eb;
+    border: 1px solid #1d4ed8;
+}
+
+QCheckBox#ThemeSwitch::indicator {
+    padding: 2px;
+}
+
+QCheckBox#ThemeSwitch:hover::indicator {
+    border: 1px solid #64748b;
+}
+
 
 /* --- PAGE TITLES & TEXT --- */
 QLabel#PageTitle {

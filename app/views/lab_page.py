@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
     QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
-    QStyledItemDelegate, QListView, QStyleOptionViewItem, QCheckBox
+    QStyledItemDelegate, QListView, QStyleOptionViewItem
 )
 from PySide6.QtCore import Signal, Qt, QRect, QSize, QEvent
 from PySide6.QtGui import QPainter, QColor
@@ -130,7 +130,6 @@ class LabPage(QWidget):
     back_requested = Signal()
     next_to_software = Signal()
     edit_lab_requested = Signal(str)
-    theme_toggled = Signal(str)
 
     def __init__(self, inventory_manager, state):
         super().__init__()
@@ -149,16 +148,16 @@ class LabPage(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(15, 15, 15, 15)
-        root.setSpacing(4)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(6)
 
-   
+        # --- Header ---
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
 
         self.back_btn = QPushButton("← Back")
         self.back_btn.setObjectName("SecondaryBtn")
-        self.back_btn.setFixedWidth(85)
+        self.back_btn.setFixedWidth(90)
         self.back_btn.clicked.connect(self.back_requested.emit)
         header_layout.addWidget(self.back_btn)
 
@@ -172,11 +171,6 @@ class LabPage(QWidget):
         # --- Controls Row ---
         controls = QHBoxLayout()
         controls.setSpacing(5)
-
-        self.theme_switch = QCheckBox("Light")
-        self.theme_switch.setChecked(self.state.theme == "light")
-        self.theme_switch.stateChanged.connect(self._toggle_theme)
-        controls.addWidget(self.theme_switch)
 
         controls.addWidget(QLabel("Lab:"))
 
@@ -214,29 +208,28 @@ class LabPage(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
 
-        # ✅ Outer container for vertical centering
+        # Outer container for vertical centering
         self.wrap = QWidget()
         outer = QVBoxLayout(self.wrap)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        outer.addStretch(1)  
+        outer.addStretch(1)
 
-       
         row_holder = QWidget()
         self.wrap_layout = QHBoxLayout(row_holder)
         self.wrap_layout.setSpacing(16)
         self.wrap_layout.setContentsMargins(0, 0, 0, 0)
-        self.wrap_layout.setAlignment(Qt.AlignHCenter)  
+        self.wrap_layout.setAlignment(Qt.AlignHCenter)
 
         outer.addWidget(row_holder, 0, Qt.AlignHCenter)
 
-        outer.addStretch(1) 
+        outer.addStretch(1)
 
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
 
-       
+        # --- Footer ---
         footer = QFrame()
         footer.setObjectName("FooterBar")
         f = QHBoxLayout(footer)
@@ -322,7 +315,6 @@ class LabPage(QWidget):
         if not layout or not pcs:
             return
 
-        
         self.wrap_layout.addStretch(1)
 
         for s in range(layout["sections"]):
@@ -448,7 +440,3 @@ class LabPage(QWidget):
 
     def _update_os_label(self):
         self.target_os_lbl.setText(f"Target OS: {self.state.target_os.upper()}")
-
-    def _toggle_theme(self):
-        new_theme = "light" if self.theme_switch.isChecked() else "dark"
-        self.theme_toggled.emit(new_theme)
