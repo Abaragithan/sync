@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QMessageBox, QDialog, QSizePolicy, QGridLayout,
-    QProgressBar, QGraphicsDropShadowEffect
+    QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect, Property, QPointF
+from PySide6.QtCore import (
+    Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect, Property, QPoint, QPointF,
+    QParallelAnimationGroup
+)
 from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QLinearGradient, QFont
 
-from .create_lab_dialog import CreateLabDialog
+from .dialogs.confirm_delete_dialog import ConfirmDeleteDialog
+from .dialogs.create_lab_dialog import CreateLabDialog  # ✅ NEW: moved into dialogs folder
 
 
 # ────────────────────────────────────────────────
@@ -297,7 +303,7 @@ class HoverCard(QFrame):
 
 
 # ────────────────────────────────────────────────
-#   DashboardPage
+#   DashboardPage (Max 2 columns + Stats Panel)
 # ────────────────────────────────────────────────
 class DashboardPage(QWidget):
     lab_selected = Signal(str)
@@ -337,25 +343,27 @@ class DashboardPage(QWidget):
         self.create_btn = QPushButton("+ New Lab")
         self.create_btn.setObjectName("CreateButton")
         self.create_btn.setCursor(Qt.PointingHandCursor)
-        self.create_btn.setFixedHeight(40)
-        self.create_btn.setFixedWidth(140)
         self.create_btn.clicked.connect(self._open_create_dialog)
         btn_row.addWidget(self.create_btn)
 
         layout.addLayout(btn_row)
 
-        # ─── Labs Grid
+        # ─── Scroll + Grid
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setObjectName("DashboardScroll")
 
         self.scroll_widget = QWidget()
+        self.scroll_widget.setObjectName("DashboardScrollWidget")
+
         self.grid_layout = QGridLayout(self.scroll_widget)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setHorizontalSpacing(16)
-        self.grid_layout.setVerticalSpacing(16)
+        self.grid_layout.setHorizontalSpacing(20)
+        self.grid_layout.setVerticalSpacing(20)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
+        # ✅ Always max 2 columns
         self.grid_layout.setColumnStretch(0, 1)
         self.grid_layout.setColumnStretch(1, 1)
 
@@ -366,47 +374,55 @@ class DashboardPage(QWidget):
         self.theme_switch = ThemeToggle(self)
         current_theme = getattr(self.state, "theme", "dark") if self.state else "dark"
         is_light = current_theme == "light"
+
         self.theme_switch.setChecked(is_light)
         self.theme_switch._dark_theme = not is_light
         self.theme_switch.setProperty("circle_position", 1.0 if is_light else 0.0)
         self.theme_switch.update()
+
         self.theme_switch.toggled.connect(self._toggle_theme)
         return self.theme_switch
 
+    def _toggle_theme(self, checked):
+        new_theme = "light" if checked else "dark"
+        if self.state:
+            self.state.theme = new_theme
+        self.theme_toggled.emit(new_theme)
+        self.refresh_labs()
+
+    # ─── Row widget: Label + Value
     def _info_row(self, label_text: str, value_text: str) -> QWidget:
         row = QWidget()
         row.setObjectName("LabInfoRow")
 
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(8)
+        h.setSpacing(12)
 
         lbl = QLabel(label_text)
         lbl.setObjectName("LabInfoLabel")
         lbl.setFixedWidth(110)
+        lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         val = QLabel(value_text)
         val.setObjectName("LabInfoValue")
+        val.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         val.setWordWrap(False)
 
         h.addWidget(lbl)
-        h.addWidget(val, 1, Qt.AlignLeft)
-        h.addStretch()
+        h.addWidget(val, 1)
         return row
 
     def _create_lab_card(self, lab_name: str) -> QFrame:
         card = HoverCard()
         card.setObjectName("LabCard")
         card.setFrameShape(QFrame.StyledPanel)
-        card.setFrameShadow(QFrame.Raised)
-
-        card.setMinimumWidth(380)
-        card.setMinimumHeight(180)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        card.setMinimumHeight(190)
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(8)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(10)
 
         # Header
         header = QHBoxLayout()
@@ -424,84 +440,176 @@ class DashboardPage(QWidget):
 
         layout_data = self.inventory_manager.get_lab_layout(lab_name)
         if layout_data:
-            config = f"{layout_data.get('sections', 1)}Sections/{layout_data.get('rows', 1)}Rows/{layout_data.get('cols', 1)}Columns"
+            config = f"{layout_data.get('sections', 1)}S/{layout_data.get('rows', 1)}R/{layout_data.get('cols', 1)}C"
         else:
-            config = "1Sections/1Rows/1Columns"
+            config = "1S/1R/1C"
 
+        ip_range = "N/A"
         if pcs:
             ips = sorted([pc.get("ip") for pc in pcs if pc.get("ip")])
             if ips:
-                ip_range = f"{ips[0].split('.')[-1]}–{ips[-1].split('.')[-1]}"
-            else:
-                ip_range = "N/A"
-        else:
-            ip_range = "N/A"
+                ip_range = f"{ips[0]} – {ips[-1]}"
 
         layout.addWidget(self._info_row("Workstations:", str(count)))
         layout.addWidget(self._info_row("Layout:", config))
         layout.addWidget(self._info_row("IP Range:", ip_range))
 
-        layout.addSpacing(6)
+        layout.addStretch()
 
-        # Actions (buttons expand equally to fit card)
+        # Actions
         actions = QHBoxLayout()
         actions.setSpacing(10)
 
         edit_btn = QPushButton("Edit")
         edit_btn.setObjectName("EditButton")
         edit_btn.setCursor(Qt.PointingHandCursor)
-        edit_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         edit_btn.clicked.connect(lambda: self.edit_lab_requested.emit(lab_name))
         actions.addWidget(edit_btn)
 
         open_btn = QPushButton("Open")
         open_btn.setObjectName("OpenButton")
         open_btn.setCursor(Qt.PointingHandCursor)
-        open_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         open_btn.clicked.connect(lambda: self.lab_selected.emit(lab_name))
         actions.addWidget(open_btn)
 
         delete_btn = QPushButton("Delete")
         delete_btn.setObjectName("DeleteButton")
         delete_btn.setCursor(Qt.PointingHandCursor)
-        delete_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         delete_btn.clicked.connect(lambda: self._confirm_delete(lab_name))
         actions.addWidget(delete_btn)
 
         layout.addLayout(actions)
         return card
 
-    def _create_empty_state(self) -> QFrame:
-        container = QFrame()
-        container.setObjectName("EmptyState")
-        container.setMinimumHeight(300)
+    # ────────────────────────────────────────────────
+    #   Stats Panel (fills extra empty area)
+    # ────────────────────────────────────────────────
+    def _create_stats_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("StatsPanel")
+        panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        panel.setMinimumHeight(180)
 
-        layout = QVBoxLayout(container)
-        layout.setAlignment(Qt.AlignCenter)
-        layout.setSpacing(16)
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(18, 16, 18, 16)
+        outer.setSpacing(12)
 
-        icon = QLabel("📁")
-        icon.setStyleSheet("font-size: 48px;")
-        layout.addWidget(icon)
+        top = QHBoxLayout()
+        title = QLabel("Dashboard Overview")
+        title.setObjectName("StatsTitle")
+        top.addWidget(title)
 
-        title = QLabel("No labs yet")
-        title.setObjectName("EmptyTitle")
-        layout.addWidget(title)
+        top.addStretch()
 
-        desc = QLabel("Create your first lab to get started")
-        desc.setObjectName("EmptyDesc")
-        layout.addWidget(desc)
+        subtitle = QLabel("Quick summary of your labs")
+        subtitle.setObjectName("StatsSubTitle")
+        top.addWidget(subtitle)
 
-        return container
+        outer.addLayout(top)
 
-    def _toggle_theme(self, checked):
-        new_theme = "light" if checked else "dark"
-        if self.state:
-            self.state.theme = new_theme
-        self.theme_toggled.emit(new_theme)
-        self.refresh_labs()
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(14)
+        grid.setContentsMargins(0, 0, 0, 0)
 
+        # Compute stats
+        labs = self.inventory_manager.get_all_labs()
+        total_labs = len(labs)
+
+        total_pcs = 0
+        all_ips = []
+        for lab in labs:
+            pcs = self.inventory_manager.get_pcs_for_lab(lab) or []
+            total_pcs += len(pcs)
+            for pc in pcs:
+                ip = pc.get("ip")
+                if ip:
+                    all_ips.append(ip)
+
+        unique_ips = len(set(all_ips))
+
+        # If you later add a "last modified" field, you can show it here.
+        # For now, show runtime "updated now"
+        from PySide6.QtCore import QDateTime
+        updated_text = QDateTime.currentDateTime().toString("dd MMM yyyy, hh:mm AP")
+
+        chips = [
+            ("Total Labs", str(total_labs)),
+            ("Total Workstations", str(total_pcs)),
+            ("Unique IPs", str(unique_ips)),
+            ("Last Updated", updated_text),
+        ]
+
+        for i, (label, value) in enumerate(chips):
+            chip = QFrame()
+            chip.setObjectName("StatChip")
+
+            v = QVBoxLayout(chip)
+            v.setContentsMargins(14, 12, 14, 12)
+            v.setSpacing(6)
+
+            val = QLabel(value)
+            val.setObjectName("StatValue")
+
+            labl = QLabel(label)
+            labl.setObjectName("StatLabel")
+
+            v.addWidget(val)
+            v.addWidget(labl)
+
+            r = i // 2
+            c = i % 2
+            grid.addWidget(chip, r, c)
+
+        outer.addLayout(grid)
+
+        # Subtle entrance fade (only for stats panel)
+        eff = QGraphicsOpacityEffect(panel)
+        panel.setGraphicsEffect(eff)
+        eff.setOpacity(0.0)
+
+        fade = QPropertyAnimation(eff, b"opacity")
+        fade.setDuration(260)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Start after layout is done
+        QTimer.singleShot(0, fade.start)
+        return panel
+
+    # ────────────────────────────────────────────────
+    #   Entrance animation for lab cards
+    # ────────────────────────────────────────────────
+    def _animate_cards_in(self, cards: list[QWidget]):
+        if not cards:
+            return
+
+        def start():
+            for idx, w in enumerate(cards):
+                # Use opacity effect without breaking existing shadow:
+                # HoverCard already uses graphicsEffect (shadow).
+                # So we do NOT overwrite it here. Instead animate position only + small "pulse" on shadow.
+                # But we can safely animate position on the widget itself.
+                base_pos = w.pos()
+                w.move(base_pos.x(), base_pos.y() + 12)
+
+                pos_anim = QPropertyAnimation(w, b"pos", self)
+                pos_anim.setDuration(260)
+                pos_anim.setStartValue(w.pos())
+                pos_anim.setEndValue(base_pos)
+                pos_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+                # Stagger
+                QTimer.singleShot(idx * 70, pos_anim.start)
+
+        QTimer.singleShot(0, start)
+
+    # ────────────────────────────────────────────────
+    #   Refresh
+    # ────────────────────────────────────────────────
     def refresh_labs(self):
+        # Clear grid
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             w = item.widget()
@@ -510,17 +618,50 @@ class DashboardPage(QWidget):
 
         labs = self.inventory_manager.get_all_labs()
 
+        # Empty state (if no labs)
         if not labs:
-            empty = self._create_empty_state()
+            empty = QFrame()
+            empty.setObjectName("EmptyState")
+            empty.setMinimumHeight(320)
+            box = QVBoxLayout(empty)
+            box.setAlignment(Qt.AlignCenter)
+            box.setSpacing(10)
+
+            icon = QLabel("📁")
+            icon.setObjectName("EmptyIcon")
+            title = QLabel("No labs yet")
+            title.setObjectName("EmptyTitle")
+            desc = QLabel("Click “+ New Lab” to create your first laboratory")
+            desc.setObjectName("EmptyDesc")
+
+            box.addWidget(icon, 0, Qt.AlignCenter)
+            box.addWidget(title, 0, Qt.AlignCenter)
+            box.addWidget(desc, 0, Qt.AlignCenter)
+
             self.grid_layout.addWidget(empty, 0, 0, 1, 2)
             return
 
+        # Add lab cards (max 2 cols)
+        cards = []
         for i, lab_name in enumerate(labs):
             card = self._create_lab_card(lab_name)
             row = i // 2
             col = i % 2
             self.grid_layout.addWidget(card, row, col)
+            cards.append(card)
 
+        # ✅ Stats panel as last row spanning both columns
+        # This visually fills the screen when only few labs exist.
+        stats_row = (len(labs) + 1) // 2  # next row after last lab row
+        stats = self._create_stats_panel()
+        self.grid_layout.addWidget(stats, stats_row, 0, 1, 2)
+
+        # Entrance animation for cards only
+        self._animate_cards_in(cards)
+
+    # ────────────────────────────────────────────────
+    #   Create Lab
+    # ────────────────────────────────────────────────
     def _open_create_dialog(self):
         try:
             dlg = CreateLabDialog(self)
@@ -552,15 +693,16 @@ class DashboardPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
+    # ────────────────────────────────────────────────
+    #   Delete confirm
+    # ────────────────────────────────────────────────
     def _confirm_delete(self, lab_name: str):
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
-        reply = QMessageBox.question(
-            self,
-            "Delete Lab",
-            f"Delete {lab_name}? ({len(pcs)} workstations)",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
+        dlg = ConfirmDeleteDialog(self, lab_name=lab_name, pcs_count=len(pcs))
+
+        if dlg.exec() == QDialog.Accepted:
             if self.inventory_manager.delete_lab(lab_name):
                 self.refresh_labs()
+                QMessageBox.information(self, "Deleted", f"Lab '{lab_name}' has been deleted.")
+            else:
+                QMessageBox.critical(self, "Error", f"Failed to delete lab '{lab_name}'.")

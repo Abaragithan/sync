@@ -209,7 +209,7 @@ class LabEditPage(QWidget):
         self.part_grids = []
 
         self._build_ui()
-        self._load_labs()
+        self._refresh_lab_list()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -305,7 +305,8 @@ class LabEditPage(QWidget):
 
         root.addWidget(footer)
 
-    def _load_labs(self):
+    def _refresh_lab_list(self):
+        """Refresh the dropdown list of all labs"""
         self.lab_combo.clear()
         self.lab_combo.addItems(self.inventory_manager.get_all_labs())
 
@@ -333,7 +334,7 @@ class LabEditPage(QWidget):
                 self.lab_name_lbl.setText("No lab loaded")
                 self.title.setText("Edit Lab")
 
-            self._load_labs()
+            self._refresh_lab_list()
             self.lab_combo.hidePopup()
 
     def _clear_sections(self):
@@ -350,7 +351,7 @@ class LabEditPage(QWidget):
                 w.deleteLater()
 
     def load_lab(self, lab_name: str):
-        """Load and display a lab"""
+        """Load and display a specific lab's PCs"""
         print(f"[EDIT] Loading lab: {lab_name}")
         self.state.current_lab = lab_name
         self.state.selected_targets.clear()
@@ -374,10 +375,14 @@ class LabEditPage(QWidget):
             print(f"[EDIT] No layout or PCs found for {lab_name}")
             return
 
+        # Get the actual number of sections from the layout
+        num_sections = layout.get("sections", 1)
+        print(f"[EDIT] Lab has {num_sections} sections")
+        
         self.wrap_layout.addStretch(1)
 
-        # Create sections
-        for s in range(layout.get("sections", 1)):
+        # Create ONLY the sections that actually exist in the layout
+        for s in range(num_sections):
             frame = QFrame()
             frame.setObjectName("SectionCard")
 
@@ -404,30 +409,52 @@ class LabEditPage(QWidget):
 
         self.wrap_layout.addStretch(1)
 
-        # Add PC cards
-        pc_count = 0
+        # Group PCs by section first
+        pcs_by_section = {}
         for pc in pcs:
-            if not pc.get('ip'):
-                continue
+            section = pc.get("section", 1)
+            if section not in pcs_by_section:
+                pcs_by_section[section] = []
+            pcs_by_section[section].append(pc)
+        
+        print(f"[EDIT] PCs grouped into sections: {list(pcs_by_section.keys())}")
+        
+        # Add PC cards to their respective sections
+        pc_count = 0
+        for section_num in range(1, num_sections + 1):
+            if section_num in pcs_by_section:
+                section_pcs = pcs_by_section[section_num]
                 
-            card = PcCard(pc.get("name", "PC"), pc.get("ip", ""))
-            card.setFixedSize(60, 60)
+                # Sort PCs by row and column for consistent display
+                section_pcs.sort(key=lambda x: (x.get("row", 1), x.get("col", 1)))
+                
+                for pc in section_pcs:
+                    if not pc.get('ip'):
+                        continue
+                        
+                    card = PcCard(pc.get("name", "PC"), pc.get("ip", ""))
+                    card.setFixedSize(60, 60)
 
-            # Store PC data in the card
-            card.pc_data = pc
-            card.pc_ip = pc.get('ip', '')
-            card.pc_name = pc.get('name', 'PC')
+                    # Store PC data in the card
+                    card.pc_data = pc
+                    card.pc_ip = pc.get('ip', '')
+                    card.pc_name = pc.get('name', 'PC')
 
-            card.toggled.connect(self._on_toggle)
-            card.delete_requested.connect(lambda ip=pc["ip"]: self._remove_pc_by_ip(ip))
+                    card.toggled.connect(self._on_toggle)
+                    card.delete_requested.connect(lambda ip=pc["ip"]: self._remove_pc_by_ip(ip))
 
-            self.cards_by_ip[pc["ip"]] = card
+                    self.cards_by_ip[pc["ip"]] = card
 
-            grid = self.part_grids[pc.get("section", 1) - 1]
-            r = pc.get("row", 1) - 1
-            c = pc.get("col", 1) - 1
-            grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
-            pc_count += 1
+                    # Get the grid for this section (0-indexed)
+                    grid_index = section_num - 1
+                    if grid_index < len(self.part_grids):
+                        grid = self.part_grids[grid_index]
+                        r = pc.get("row", 1) - 1
+                        c = pc.get("col", 1) - 1
+                        grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
+                        pc_count += 1
+                    else:
+                        print(f"[EDIT] Warning: Section {section_num} grid not found")
         
         print(f"[EDIT] Displayed {pc_count} PC cards for {lab_name}")
 
