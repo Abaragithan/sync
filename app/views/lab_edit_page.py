@@ -532,8 +532,7 @@ class LabEditPage(QWidget):
             "ip": ip,
             "section": section,
             "row": row,
-            "col": col,
-            "os": "windows"  # Default OS
+            "col": col
         }
         
         # Add the PC

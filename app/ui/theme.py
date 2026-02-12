@@ -32,7 +32,6 @@ QCheckBox#ThemeSwitch::indicator:checked {
     border: 1px solid #1d4ed8;
 }
 
-/* Make it feel like a switch (thumb illusion using inset) */
 QCheckBox#ThemeSwitch::indicator {
     padding: 2px;
 }
@@ -58,7 +57,7 @@ QLabel#MutedText {
     color: #9aa4b2;
 }
 
-/* --- DASHBOARD CARD SPECIFIC --- */
+/* --- DASHBOARD CARD SPECIFIC (OLD/OTHER PAGES) --- */
 QFrame#DashboardCard {
     background-color: #1e293b;
     border: 1px solid #334155;
@@ -81,7 +80,100 @@ QLabel#CardSubtitle {
     color: #94a3b8;
 }
 
-/* --- BUTTONS --- */
+/* ------------------------------------------------------------------ */
+/* ✅ YOUR DASHBOARD LAB CARDS (LabCard)                                */
+/* Realistic hover look (border glow + soft surface change)             */
+/* Actual smooth animation handled in code via QGraphicsDropShadowEffect */
+/* ------------------------------------------------------------------ */
+QFrame#LabCard {
+    background-color: rgba(255, 255, 255, 10);
+    border: 1.6px solid rgba(255, 255, 255, 40);
+    border-radius: 16px;
+}
+QFrame#LabCard:hover {
+    background-color: rgba(255, 255, 255, 14);
+    border: 2px solid rgba(120, 180, 255, 120);
+}
+
+/* Remove line-by-line row color */
+QWidget#LabInfoRow {
+    background: transparent;
+}
+QLabel#LabInfoLabel,
+QLabel#LabInfoValue {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* Slight tone difference between label and value */
+QLabel#LabInfoLabel { color: rgba(226, 232, 240, 170); }
+QLabel#LabInfoValue { color: rgba(226, 232, 240, 235); }
+
+/* Lab name title on card (no highlight box) */
+QLabel#LabName {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    text-decoration: none;
+
+    font-size: 16px;
+    font-weight: 900;
+    color: #ffffff;
+}
+QLabel#LabName::selected { background: transparent; color: inherit; }
+
+/* Card buttons: compact + clean + fits card */
+QFrame#LabCard QPushButton#EditButton,
+QFrame#LabCard QPushButton#OpenButton,
+QFrame#LabCard QPushButton#DeleteButton {
+    padding: 6px 10px;
+    min-height: 28px;
+    max-height: 28px;
+    font-size: 12px;
+    font-weight: 800;
+    border-radius: 10px;
+
+    /* Important: prevent global big padding effect */
+    margin: 0px;
+}
+
+/* Edit = subtle */
+QFrame#LabCard QPushButton#EditButton {
+    background-color: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 50);
+    color: rgba(226, 232, 240, 230);
+}
+QFrame#LabCard QPushButton#EditButton:hover {
+    background-color: rgba(255, 255, 255, 16);
+    border: 1px solid rgba(120, 180, 255, 130);
+}
+
+/* Open = primary */
+QFrame#LabCard QPushButton#OpenButton {
+    background-color: #2563eb;
+    border: 1px solid rgba(37, 99, 235, 180);
+    color: white;
+}
+QFrame#LabCard QPushButton#OpenButton:hover { background-color: #1d4ed8; }
+QFrame#LabCard QPushButton#OpenButton:pressed { background-color: #1e40af; }
+
+/* Delete = danger (but compact) */
+QFrame#LabCard QPushButton#DeleteButton {
+    background-color: rgba(239, 68, 68, 120);
+    border: 1px solid rgba(239, 68, 68, 170);
+    color: #fff;
+}
+QFrame#LabCard QPushButton#DeleteButton:hover {
+    background-color: rgba(239, 68, 68, 160);
+}
+QFrame#LabCard QPushButton#DeleteButton:pressed {
+    background-color: rgba(220, 38, 38, 190);
+}
+
+
+/* --- BUTTONS (GLOBAL DEFAULT) --- */
 QPushButton {
     background-color: #2563eb;
     color: #ffffff;
@@ -342,7 +434,7 @@ QLabel#MutedText {
     color: #475569;
 }
 
-/* --- DASHBOARD CARD SPECIFIC --- */
+/* --- DASHBOARD CARD SPECIFIC (OLD/OTHER PAGES) --- */
 QFrame#DashboardCard {
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
@@ -365,7 +457,93 @@ QLabel#CardSubtitle {
     color: #475569;
 }
 
-/* --- BUTTONS --- */
+/* ------------------------------------------------------------------ */
+/* ✅ YOUR DASHBOARD LAB CARDS (LabCard)                                */
+/* Realistic hover look (outline)                                       */
+/* Smooth animation handled in code                                    */
+/* ------------------------------------------------------------------ */
+QFrame#LabCard {
+    background-color: #ffffff;
+    border: 1.6px solid rgba(0, 0, 0, 25);
+    border-radius: 16px;
+}
+QFrame#LabCard:hover {
+    background-color: #f8fafc;
+    border: 2px solid rgba(37, 99, 235, 90);
+}
+
+/* Remove line-by-line row color */
+QWidget#LabInfoRow {
+    background: transparent;
+}
+QLabel#LabInfoLabel,
+QLabel#LabInfoValue {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+QLabel#LabInfoLabel { color: rgba(15, 23, 42, 150); }
+QLabel#LabInfoValue { color: rgba(15, 23, 42, 235); }
+
+/* Lab name title on card (no highlight box) */
+QLabel#LabName {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    text-decoration: none;
+
+    font-size: 16px;
+    font-weight: 900;
+    color: #0f172a;
+}
+QLabel#LabName::selected { background: transparent; color: inherit; }
+
+/* Card buttons: compact + clean */
+QFrame#LabCard QPushButton#EditButton,
+QFrame#LabCard QPushButton#OpenButton,
+QFrame#LabCard QPushButton#DeleteButton {
+    padding: 6px 10px;
+    min-height: 28px;
+    max-height: 28px;
+    font-size: 12px;
+    font-weight: 800;
+    border-radius: 10px;
+    margin: 0px;
+}
+
+/* Edit = outlined */
+QFrame#LabCard QPushButton#EditButton {
+    background-color: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 60);
+    color: rgba(15, 23, 42, 220);
+}
+QFrame#LabCard QPushButton#EditButton:hover {
+    background-color: #f1f5f9;
+    border: 1px solid rgba(37, 99, 235, 120);
+}
+
+/* Open = primary */
+QFrame#LabCard QPushButton#OpenButton {
+    background-color: #2563eb;
+    border: 1px solid rgba(37, 99, 235, 180);
+    color: white;
+}
+QFrame#LabCard QPushButton#OpenButton:hover { background-color: #1d4ed8; }
+QFrame#LabCard QPushButton#OpenButton:pressed { background-color: #1e40af; }
+
+/* Delete = danger */
+QFrame#LabCard QPushButton#DeleteButton {
+    background-color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 200);
+    color: white;
+}
+QFrame#LabCard QPushButton#DeleteButton:hover { background-color: #dc2626; }
+QFrame#LabCard QPushButton#DeleteButton:pressed { background-color: #b91c1c; }
+
+
+/* --- BUTTONS (GLOBAL DEFAULT) --- */
 QPushButton {
     background-color: #2563eb;
     color: #ffffff;
