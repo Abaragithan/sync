@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage(self.inventory_manager)
         self.lab = LabPage(self.inventory_manager, self.state)
         self.software = SoftwarePage(self.inventory_manager, self.state)
-        self.lab_edit = LabEditPage(self.inventory_manager)
+        self.lab_edit = LabEditPage(self.inventory_manager, self.state)
 
         self.dashboard = DashboardPage(self.inventory_manager, self.state)
 

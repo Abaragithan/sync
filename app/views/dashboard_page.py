@@ -1,10 +1,84 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QMessageBox, QDialog, QSizePolicy, QGridLayout, QCheckBox
+    QFrame, QScrollArea, QMessageBox, QDialog, QSizePolicy, QGridLayout, QCheckBox,
+    QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer
 
 from .create_lab_dialog import CreateLabDialog
+
+
+# ────────────────────────────────────────────────
+#   ThemeToggle class exactly as you provided
+# ────────────────────────────────────────────────
+class ThemeToggle(QPushButton):
+    """Elegant theme toggle with moon/sun symbols"""
+   
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setFixedSize(80, 34)
+        self.setCursor(Qt.PointingHandCursor)
+        self._dark_theme = True
+        self.update_style()
+       
+    def update_style(self):
+        """Update button style based on theme"""
+        if self._dark_theme:
+            self.setText("🌙 Dark")
+            bg_color = "#1a2634"
+            text_color = "#ecf0f1"
+            hover_color = "#2c3e50"
+            border_color = "#34495e"
+        else:
+            self.setText("☀️ Light")
+            bg_color = "#f8f9fa"
+            text_color = "#2c3e50"
+            hover_color = "#e9ecef"
+            border_color = "#dee2e6"
+       
+        self.setStyleSheet(f"""
+            ThemeToggle {{
+                background-color: {bg_color};
+                color: {text_color};
+                border: 1px solid {border_color};
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 500;
+                padding: 0px 12px;
+                text-align: left;
+            }}
+           
+            ThemeToggle:hover {{
+                background-color: {hover_color};
+                border: 1px solid #3498db;
+            }}
+           
+            ThemeToggle:pressed {{
+                padding-top: 1px;
+                padding-bottom: 0px;
+            }}
+        """)
+   
+    def nextCheckState(self):
+        super().nextCheckState()
+        self._dark_theme = not self.isChecked()
+        self.update_style()
+       
+        # Subtle pulse animation
+        self._pulse_animation()
+   
+    def _pulse_animation(self):
+        """Subtle pulse effect when toggling"""
+        effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(effect)
+       
+        anim = QPropertyAnimation(effect, b"opacity")
+        anim.setDuration(200)
+        anim.setStartValue(0.8)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.start()
 
 
 class DashboardPage(QWidget):
@@ -12,7 +86,7 @@ class DashboardPage(QWidget):
     edit_lab_requested = Signal(str)
     back_requested = Signal()
 
-    # ✅ NEW: Theme toggle signal moved here
+    # Theme toggle signal
     theme_toggled = Signal(str)
 
     def __init__(self, inventory_manager, state=None):
@@ -36,14 +110,20 @@ class DashboardPage(QWidget):
 
         header_layout.addStretch()
 
-        # ✅ Theme toggle moved here
-        self.theme_switch = QCheckBox("Light")
-        current_theme = getattr(self.state, "theme", "dark") if self.state else "dark"
-        self.theme_switch.setChecked(current_theme == "light")
-        self.theme_switch.stateChanged.connect(self._toggle_theme)
-        header_layout.addWidget(self.theme_switch)
-       # self.theme_switch.setObjectName("ThemeSwitch")
+        # Using your ThemeToggle instead of QCheckBox
+        self.theme_switch = ThemeToggle(self)
 
+        # Set initial state
+        current_theme = getattr(self.state, "theme", "dark") if self.state else "dark"
+        is_light = current_theme == "light"
+        self.theme_switch.setChecked(is_light)
+        self.theme_switch._dark_theme = not is_light   # sync internal flag
+        self.theme_switch.update_style()
+
+        # Connect the toggled signal (QPushButton style)
+        self.theme_switch.toggled.connect(self._toggle_theme)
+
+        header_layout.addWidget(self.theme_switch)
 
         self.create_btn = QPushButton("Create New Lab")
         self.create_btn.setObjectName("PrimaryBtn")
@@ -73,8 +153,10 @@ class DashboardPage(QWidget):
         self.status_lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_lbl)
 
-    def _toggle_theme(self):
-        new_theme = "light" if self.theme_switch.isChecked() else "dark"
+    def _toggle_theme(self, checked):
+        new_theme = "light" if checked else "dark"
+        if self.state:
+            self.state.theme = new_theme
         self.theme_toggled.emit(new_theme)
 
     def refresh_labs(self):

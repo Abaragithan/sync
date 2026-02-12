@@ -167,11 +167,17 @@ class InventoryManager:
 
         return deleted
 
-    def add_pc(self, lab: str, pc: Dict) -> None:
+    def add_pc(self, lab: str, pc: Dict) -> bool:
         """
-        Add a PC to a lab. Works in both formats.
-        For NEW format it appends into labs[lab]["pcs"].
+        Add a PC to a lab. Returns True if successful, False if duplicate IP.
         """
+        # Check for duplicate IP first
+        existing_pcs = self.get_pcs_for_lab(lab)
+        for existing in existing_pcs:
+            if existing.get("ip") == pc.get("ip"):
+                print(f"[INVENTORY] Duplicate IP blocked: {pc.get('ip')}")
+                return False
+        
         if self._is_new_format():
             if lab not in self.data["labs"]:
                 self.data["labs"][lab] = {"layout": None, "pcs": []}
@@ -185,8 +191,9 @@ class InventoryManager:
             self.data[lab].append(pc)
 
         self._save(self.data)
-        print(f"[INVENTORY] Added PC to {lab}: {pc.get('name')} ({pc.get('ip')})")
-
+        print(f"[INVENTORY] Added PC to {lab}: {pc.get('name')} ({pc.get('ip')}) at section {pc.get('section')}, row {pc.get('row')}, col {pc.get('col')}")
+        return True
+    
     def remove_pc(self, lab_name: str, ip: str) -> bool:
         removed = False
 

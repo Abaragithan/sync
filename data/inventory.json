@@ -1,6 +1,6 @@
 {
   "labs": {
-    "CSl 3 & 4": {
+    "CSL 3 & 4": {
       "layout": {
         "sections": 3,
         "rows": 7,
@@ -701,29 +701,16 @@
           "col": 5
         },
         {
-          "name": "PC-101",
-          "ip": "192.168.10.101",
-          "section": 3,
-          "row": 7,
-          "col": 1
-        },
-        {
-          "name": "PC-102",
-          "ip": "192.168.10.102",
-          "section": 3,
-          "row": 7,
-          "col": 2
-        },
-        {
-          "name": "PC-103",
-          "ip": "192.168.10.103",
-          "section": 3,
-          "row": 7,
-          "col": 3
+          "name": "PC-014",
+          "ip": "192.168.10.14",
+          "section": 1,
+          "row": 3,
+          "col": 4,
+          "os": "windows"
         }
       ]
     },
-    "CSL 1 &2": {
+    "CSL 1 & 2": {
       "layout": {
         "sections": 4,
         "rows": 5,
@@ -1408,6 +1395,30 @@
           "section": 4,
           "row": 5,
           "col": 5
+        },
+        {
+          "name": "PC-036",
+          "ip": "192.160.10.36",
+          "section": 2,
+          "row": 3,
+          "col": 1,
+          "os": "windows"
+        },
+        {
+          "name": "PC-038",
+          "ip": "192.160.10.38",
+          "section": 2,
+          "row": 3,
+          "col": 3,
+          "os": "windows"
+        },
+        {
+          "name": "PC-039",
+          "ip": "192.160.10.39",
+          "section": 2,
+          "row": 3,
+          "col": 4,
+          "os": "windows"
         }
       ]
     }
