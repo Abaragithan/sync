@@ -349,32 +349,6 @@ QWidget#SoftwarePage QTextEdit#Console {
     color: #e5e7eb;
 }
 
-/* --- CREATE LAB DIALOG --- */
-QDialog#CreateLabDialog QLabel#DialogTitle {
-    font-size: 18px;
-    font-weight: 800;
-    color: #ffffff;
-}
-QDialog#CreateLabDialog QLabel#DialogSubText {
-    color: #94a3b8;
-    font-size: 12px;
-}
-QDialog#CreateLabDialog QFrame#DialogCard {
-    background-color: #111827;
-    border: 1px solid #334155;
-    border-radius: 14px;
-}
-QDialog#CreateLabDialog QLabel#DialogSectionHeader {
-    font-weight: 800;
-    font-size: 13px;
-    color: #e5e7eb;
-    padding-top: 4px;
-}
-QDialog#CreateLabDialog QLabel#DialogHintText {
-    color: #9aa4b2;
-    font-size: 12px;
-}
-
 /* Card buttons: compact + clean + fits card */
 QFrame#LabCard QPushButton#EditButton,
 QFrame#LabCard QPushButton#OpenButton,
@@ -533,6 +507,158 @@ QLabel#StatLabel {
     color: rgba(226, 232, 240, 150);
 }
 
+QDialog#CreateLabDialog { background: transparent; }
+
+QDialog#CreateLabDialog QLabel#CreateLabRowLabel,
+QDialog#CreateLabDialog QLabel#CreateLabChipLabel,
+QDialog#CreateLabDialog QLabel#CreateLabDash,
+QDialog#CreateLabDialog QLabel#CreateLabTitle,
+QDialog#CreateLabDialog QLabel#CreateLabSubtitle,
+QDialog#CreateLabDialog QLabel#CreateLabWarningText {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+QFrame#CreateLabCard {
+    background-color: rgba(20, 20, 20, 240);
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 16px;
+}
+
+QFrame#CreateLabIconContainer {
+    background: transparent;
+}
+
+QLabel#CreateLabTitle {
+    font-size: 16px;
+    font-weight: 900;
+    color: #ffffff;
+}
+
+QLabel#CreateLabSubtitle {
+    color: rgba(226, 232, 240, 190);
+    font-size: 13px;
+}
+
+QFrame#CreateLabDivider {
+    background: rgba(255, 255, 255, 30);
+    border-radius: 1px;
+}
+
+QLabel#CreateLabRowLabel {
+    color: rgba(226, 232, 240, 200);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+QLineEdit#CreateLabInput {
+    background: rgba(255, 255, 255, 8);
+    border: 1px solid rgba(255, 255, 255, 28);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: rgba(226, 232, 240, 235);
+    font-size: 13px;
+}
+
+QLineEdit#CreateLabInput:focus {
+    border: 1px solid rgba(120, 180, 255, 140);
+    background: rgba(255, 255, 255, 10);
+}
+
+QLabel#CreateLabDash {
+    color: rgba(226, 232, 240, 140);
+    font-weight: 900;
+}
+
+QFrame#CreateLabChip {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 14px;
+}
+
+QLabel#CreateLabChipLabel {
+    color: rgba(226, 232, 240, 190);
+    font-weight: 800;
+    font-size: 12px;
+}
+
+QSpinBox#CreateLabSpin {
+    background: rgba(255, 255, 255, 8);
+    border: 1px solid rgba(255, 255, 255, 26);
+    border-radius: 10px;
+    padding: 6px 10px;
+    color: rgba(226, 232, 240, 235);
+    font-weight: 900;
+    min-height: 30px;
+}
+
+QSpinBox#CreateLabSpin:focus {
+    border: 1px solid rgba(120, 180, 255, 140);
+}
+
+/* warning pill (like delete warning) */
+QFrame#CreateLabWarning {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 12px;
+}
+
+QLabel#CreateLabWarningText {
+    color: rgba(226, 232, 240, 210);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QPushButton#CreateLabCancelBtn {
+    background: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 35);
+    color: rgba(226, 232, 240, 230);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-weight: 800;
+}
+QPushButton#CreateLabCancelBtn:hover {
+    background: rgba(255, 255, 255, 16);
+    border: 1px solid rgba(120, 180, 255, 120);
+}
+
+QPushButton#CreateLabCreateBtn {
+    background: rgba(59, 130, 246, 190);
+    border: 1px solid rgba(59, 130, 246, 220);
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-weight: 900;
+}
+QPushButton#CreateLabCreateBtn:hover {
+    background: rgba(37, 99, 235, 220);
+}
+QPushButton#CreateLabCreateBtn:pressed {
+    background: rgba(30, 64, 175, 240);
+}
+QPushButton#CreateLabCreateBtn:disabled {
+    background: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 20);
+    color: rgba(226, 232, 240, 120);
+}
+
+/* =========================
+   Trash (Delete) Button – Dark
+   ========================= */
+#TrashButton {
+    background: transparent;
+    border: none;
+}
+
+#TrashButton:hover {
+    background: rgba(255, 255, 255, 25);   /* soft white glow */
+    border-radius: 6px;
+}
+
+#TrashButton:pressed {
+    background: rgba(255, 255, 255, 40);
+}
 
 """
 
@@ -899,31 +1025,6 @@ QWidget#SoftwarePage QTextEdit#Console {
     color: #0f172a;
 }
 
-/* --- CREATE LAB DIALOG --- */
-QDialog#CreateLabDialog QLabel#DialogTitle {
-    font-size: 18px;
-    font-weight: 800;
-    color: #0f172a;
-}
-QDialog#CreateLabDialog QLabel#DialogSubText {
-    color: #475569;
-    font-size: 12px;
-}
-QDialog#CreateLabDialog QFrame#DialogCard {
-    background-color: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 14px;
-}
-QDialog#CreateLabDialog QLabel#DialogSectionHeader {
-    font-weight: 800;
-    font-size: 13px;
-    color: #0f172a;
-    padding-top: 4px;
-}
-QDialog#CreateLabDialog QLabel#DialogHintText {
-    color: #475569;
-    font-size: 12px;
-}
 
 /* Card buttons: compact + clean */
 QFrame#LabCard QPushButton#EditButton,
@@ -1139,6 +1240,161 @@ QDialog#CreateLabDialog QPushButton#CreateConfirmBtn:hover {
 QDialog#CreateLabDialog QPushButton#CreateConfirmBtn:pressed {
     background-color: rgba(30,64,175,1.0);
     border: 1px solid rgba(30,64,175,1.0);
+}
+
+QDialog#CreateLabDialog { background: transparent; }
+
+QDialog#CreateLabDialog QLabel#CreateLabRowLabel,
+QDialog#CreateLabDialog QLabel#CreateLabChipLabel,
+QDialog#CreateLabDialog QLabel#CreateLabDash,
+QDialog#CreateLabDialog QLabel#CreateLabTitle,
+QDialog#CreateLabDialog QLabel#CreateLabSubtitle,
+QDialog#CreateLabDialog QLabel#CreateLabWarningText {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+QFrame#CreateLabCard {
+    background-color: rgba(255, 255, 255, 245);
+    border: 1px solid rgba(15, 23, 42, 30);
+    border-radius: 16px;
+}
+
+QFrame#CreateLabIconContainer {
+    background: transparent;
+}
+
+QLabel#CreateLabTitle {
+    font-size: 16px;
+    font-weight: 900;
+    color: #0f172a;
+}
+
+QLabel#CreateLabSubtitle {
+    color: rgba(15, 23, 42, 170);
+    font-size: 13px;
+}
+
+QFrame#CreateLabDivider {
+    background: rgba(15, 23, 42, 20);
+    border-radius: 1px;
+}
+
+QLabel#CreateLabRowLabel {
+    color: rgba(15, 23, 42, 170);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+QLineEdit#CreateLabInput {
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 20);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: rgba(15, 23, 42, 235);
+    font-size: 13px;
+}
+
+QLineEdit#CreateLabInput:focus {
+    border: 1px solid rgba(37, 99, 235, 140);
+    background: rgba(15, 23, 42, 2);
+}
+
+QLabel#CreateLabDash {
+    color: rgba(15, 23, 42, 120);
+    font-weight: 900;
+}
+
+QFrame#CreateLabChip {
+    background: rgba(15, 23, 42, 4);
+    border: 1px solid rgba(15, 23, 42, 10);
+    border-radius: 14px;
+}
+
+QLabel#CreateLabChipLabel {
+    color: rgba(15, 23, 42, 180);
+    font-weight: 800;
+    font-size: 12px;
+}
+
+QSpinBox#CreateLabSpin {
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 18);
+    border-radius: 10px;
+    padding: 6px 10px;
+    color: rgba(15, 23, 42, 235);
+    font-weight: 900;
+    min-height: 30px;
+}
+
+QSpinBox#CreateLabSpin:focus {
+    border: 1px solid rgba(37, 99, 235, 140);
+}
+
+/* warning pill */
+QFrame#CreateLabWarning {
+    background: rgba(15, 23, 42, 4);
+    border: 1px solid rgba(15, 23, 42, 10);
+    border-radius: 12px;
+}
+
+QLabel#CreateLabWarningText {
+    color: rgba(15, 23, 42, 200);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QPushButton#CreateLabCancelBtn {
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 40);
+    color: rgba(15, 23, 42, 230);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-weight: 800;
+}
+QPushButton#CreateLabCancelBtn:hover {
+    background: #f1f5f9;
+    border: 1px solid rgba(37, 99, 235, 110);
+}
+
+QPushButton#CreateLabCreateBtn {
+    background: rgba(59, 130, 246, 1.0);
+    border: 1px solid rgba(59, 130, 246, 1.0);
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-weight: 900;
+}
+QPushButton#CreateLabCreateBtn:hover {
+    background: rgba(37, 99, 235, 1.0);
+    border: 1px solid rgba(37, 99, 235, 1.0);
+}
+QPushButton#CreateLabCreateBtn:pressed {
+    background: rgba(30, 64, 175, 1.0);
+    border: 1px solid rgba(30, 64, 175, 1.0);
+}
+QPushButton#CreateLabCreateBtn:disabled {
+    background: rgba(15, 23, 42, 6);
+    border: 1px solid rgba(15, 23, 42, 12);
+    color: rgba(15, 23, 42, 120);
+}
+
+/* =========================
+   Trash (Delete) Button – Light
+   ========================= */
+#TrashButton {
+    background: transparent;
+    border: none;
+}
+
+#TrashButton:hover {
+    background: rgba(0, 0, 0, 20);   /* light grey hover */
+    border-radius: 6px;
+}
+
+#TrashButton:pressed {
+    background: rgba(0, 0, 0, 35);
 }
 
 """

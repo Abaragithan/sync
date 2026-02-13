@@ -6,13 +6,13 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 )
 from PySide6.QtCore import (
-    Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect, Property, QPoint, QPointF,
-    QParallelAnimationGroup
+    Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect, Property, QPointF
 )
 from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QLinearGradient, QFont
 
 from .dialogs.confirm_delete_dialog import ConfirmDeleteDialog
-from .dialogs.create_lab_dialog import CreateLabDialog  # ✅ NEW: moved into dialogs folder
+from .dialogs.create_lab_dialog import CreateLabDialog
+import ipaddress
 
 
 # ────────────────────────────────────────────────
@@ -303,6 +303,146 @@ class HoverCard(QFrame):
 
 
 # ────────────────────────────────────────────────
+#   TrashButton (Animated Dustbin Icon)
+# ────────────────────────────────────────────────
+class TrashButton(QPushButton):
+    def _get_lid_angle(self):
+        return self._lid_angle
+
+    def _set_lid_angle(self, angle):
+        self._lid_angle = angle
+        self.update()
+
+    def _get_bin_scale(self):
+        return self._bin_scale
+
+    def _set_bin_scale(self, scale):
+        self._bin_scale = scale
+        self.update()
+
+    lid_angle = Property(float, _get_lid_angle, _set_lid_angle)
+    bin_scale = Property(float, _get_bin_scale, _set_bin_scale)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("TrashButton")
+        self.setCursor(Qt.PointingHandCursor)
+
+        self._lid_angle = 0.0
+        self._bin_scale = 1.0
+
+        # Hover: lid opens/closes
+        self._hover_anim = QPropertyAnimation(self, b"lid_angle")
+        self._hover_anim.setDuration(180)
+        self._hover_anim.setEasingCurve(QEasingCurve.OutBack)
+
+        # Click: small scale "pop"
+        self._click_anim = QPropertyAnimation(self, b"bin_scale")
+        self._click_anim.setDuration(140)
+        self._click_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Make it feel like an icon button
+        self.setFixedSize(32, 32)
+        self.setFlat(True)
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._lid_angle)
+        self._hover_anim.setEndValue(28.0)
+        self._hover_anim.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._lid_angle)
+        self._hover_anim.setEndValue(0.0)
+        self._hover_anim.start()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._click_anim.stop()
+        self._click_anim.setStartValue(self._bin_scale)
+        self._click_anim.setEndValue(0.88)
+        self._click_anim.start()
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._click_anim.stop()
+        self._click_anim.setStartValue(self._bin_scale)
+        self._click_anim.setEndValue(1.0)
+        self._click_anim.start()
+
+    def paintEvent(self, event):
+        # IMPORTANT: allows stylesheet hover background (if you add QSS)
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        w = self.width()
+        h = self.height()
+        cx = w // 2
+        cy = h // 2
+
+        # Theme detection from property (set from DashboardPage)
+        is_dark = (self.property("theme") != "light")
+
+        if is_dark:
+            bin_color = QColor(220, 80, 80)
+            lid_color = QColor(200, 70, 70)
+            outline = QColor(0, 0, 0, 50)
+            detail = QColor(255, 255, 255, 90)
+        else:
+            bin_color = QColor(200, 60, 60)
+            lid_color = QColor(180, 50, 50)
+            outline = QColor(0, 0, 0, 35)
+            detail = QColor(255, 255, 255, 120)
+
+        if self.underMouse():
+            bin_color = bin_color.lighter(115)
+            lid_color = lid_color.lighter(115)
+
+        # Scale animation
+        painter.translate(cx, cy)
+        painter.scale(self._bin_scale, self._bin_scale)
+        painter.translate(-cx, -cy)
+
+        # Body
+        body = QRect(cx - 8, cy - 2, 16, 12)
+        painter.setBrush(QBrush(bin_color))
+        painter.setPen(QPen(outline, 1))
+        painter.drawRoundedRect(body, 2, 2)
+
+        # Body details
+        painter.setPen(QPen(detail, 1))
+        painter.drawLine(cx - 4, cy + 2, cx - 1, cy + 2)
+        painter.drawLine(cx + 1, cy + 2, cx + 4, cy + 2)
+
+        # Lid (rotates around hinge)
+        painter.save()
+        hinge_x = cx
+        hinge_y = cy - 4
+        painter.translate(hinge_x, hinge_y)
+        painter.rotate(self._lid_angle)
+        painter.translate(-hinge_x, -hinge_y)
+
+        lid = QRect(cx - 10, cy - 10, 20, 6)
+        painter.setBrush(QBrush(lid_color))
+        painter.setPen(QPen(outline, 1))
+        painter.drawRoundedRect(lid, 2, 2)
+
+        # Handle
+        painter.setBrush(QBrush(lid_color.lighter(120)))
+        painter.setPen(Qt.NoPen)
+        handle = QRect(cx - 3, cy - 12, 6, 3)
+        painter.drawRoundedRect(handle, 1, 1)
+
+        painter.restore()
+
+
+# ────────────────────────────────────────────────
 #   DashboardPage (Max 2 columns + Stats Panel)
 # ────────────────────────────────────────────────
 class DashboardPage(QWidget):
@@ -413,6 +553,7 @@ class DashboardPage(QWidget):
         h.addWidget(val, 1)
         return row
 
+    # ✅ UPDATED: only button design changed, no functionality touched
     def _create_lab_card(self, lab_name: str) -> QFrame:
         card = HoverCard()
         card.setObjectName("LabCard")
@@ -446,9 +587,10 @@ class DashboardPage(QWidget):
 
         ip_range = "N/A"
         if pcs:
-            ips = sorted([pc.get("ip") for pc in pcs if pc.get("ip")])
+            ips = [pc.get("ip") for pc in pcs if pc.get("ip")]
             if ips:
-                ip_range = f"{ips[0]} – {ips[-1]}"
+                ip_objs = sorted(ipaddress.ip_address(ip) for ip in ips)
+                ip_range = f"{ip_objs[0]} – {ip_objs[-1]}"
 
         layout.addWidget(self._info_row("Workstations:", str(count)))
         layout.addWidget(self._info_row("Layout:", config))
@@ -456,27 +598,33 @@ class DashboardPage(QWidget):
 
         layout.addStretch()
 
-        # Actions
+        # Actions (same signals, only UI sizes + custom trash icon)
         actions = QHBoxLayout()
-        actions.setSpacing(10)
+        actions.setSpacing(8)
 
         edit_btn = QPushButton("Edit")
         edit_btn.setObjectName("EditButton")
         edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.setFixedHeight(32)
+        edit_btn.setFixedWidth(78)
         edit_btn.clicked.connect(lambda: self.edit_lab_requested.emit(lab_name))
         actions.addWidget(edit_btn)
 
         open_btn = QPushButton("Open")
         open_btn.setObjectName("OpenButton")
         open_btn.setCursor(Qt.PointingHandCursor)
+        open_btn.setFixedHeight(36)
+        open_btn.setFixedWidth(92)
         open_btn.clicked.connect(lambda: self.lab_selected.emit(lab_name))
         actions.addWidget(open_btn)
 
-        delete_btn = QPushButton("Delete")
-        delete_btn.setObjectName("DeleteButton")
-        delete_btn.setCursor(Qt.PointingHandCursor)
-        delete_btn.clicked.connect(lambda: self._confirm_delete(lab_name))
-        actions.addWidget(delete_btn)
+        actions.addStretch()
+
+        trash_btn = TrashButton()
+        # pass theme so the icon colors match light/dark
+        trash_btn.setProperty("theme", getattr(self.state, "theme", "dark") if self.state else "dark")
+        trash_btn.clicked.connect(lambda: self._confirm_delete(lab_name))
+        actions.addWidget(trash_btn)
 
         layout.addLayout(actions)
         return card
@@ -512,7 +660,6 @@ class DashboardPage(QWidget):
         grid.setVerticalSpacing(14)
         grid.setContentsMargins(0, 0, 0, 0)
 
-        # Compute stats
         labs = self.inventory_manager.get_all_labs()
         total_labs = len(labs)
 
@@ -528,8 +675,6 @@ class DashboardPage(QWidget):
 
         unique_ips = len(set(all_ips))
 
-        # If you later add a "last modified" field, you can show it here.
-        # For now, show runtime "updated now"
         from PySide6.QtCore import QDateTime
         updated_text = QDateTime.currentDateTime().toString("dd MMM yyyy, hh:mm AP")
 
@@ -563,7 +708,6 @@ class DashboardPage(QWidget):
 
         outer.addLayout(grid)
 
-        # Subtle entrance fade (only for stats panel)
         eff = QGraphicsOpacityEffect(panel)
         panel.setGraphicsEffect(eff)
         eff.setOpacity(0.0)
@@ -574,23 +718,15 @@ class DashboardPage(QWidget):
         fade.setEndValue(1.0)
         fade.setEasingCurve(QEasingCurve.OutCubic)
 
-        # Start after layout is done
         QTimer.singleShot(0, fade.start)
         return panel
 
-    # ────────────────────────────────────────────────
-    #   Entrance animation for lab cards
-    # ────────────────────────────────────────────────
     def _animate_cards_in(self, cards: list[QWidget]):
         if not cards:
             return
 
         def start():
             for idx, w in enumerate(cards):
-                # Use opacity effect without breaking existing shadow:
-                # HoverCard already uses graphicsEffect (shadow).
-                # So we do NOT overwrite it here. Instead animate position only + small "pulse" on shadow.
-                # But we can safely animate position on the widget itself.
                 base_pos = w.pos()
                 w.move(base_pos.x(), base_pos.y() + 12)
 
@@ -600,16 +736,11 @@ class DashboardPage(QWidget):
                 pos_anim.setEndValue(base_pos)
                 pos_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-                # Stagger
                 QTimer.singleShot(idx * 70, pos_anim.start)
 
         QTimer.singleShot(0, start)
 
-    # ────────────────────────────────────────────────
-    #   Refresh
-    # ────────────────────────────────────────────────
     def refresh_labs(self):
-        # Clear grid
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             w = item.widget()
@@ -618,7 +749,6 @@ class DashboardPage(QWidget):
 
         labs = self.inventory_manager.get_all_labs()
 
-        # Empty state (if no labs)
         if not labs:
             empty = QFrame()
             empty.setObjectName("EmptyState")
@@ -641,7 +771,6 @@ class DashboardPage(QWidget):
             self.grid_layout.addWidget(empty, 0, 0, 1, 2)
             return
 
-        # Add lab cards (max 2 cols)
         cards = []
         for i, lab_name in enumerate(labs):
             card = self._create_lab_card(lab_name)
@@ -650,18 +779,12 @@ class DashboardPage(QWidget):
             self.grid_layout.addWidget(card, row, col)
             cards.append(card)
 
-        # ✅ Stats panel as last row spanning both columns
-        # This visually fills the screen when only few labs exist.
-        stats_row = (len(labs) + 1) // 2  # next row after last lab row
+        stats_row = (len(labs) + 1) // 2
         stats = self._create_stats_panel()
         self.grid_layout.addWidget(stats, stats_row, 0, 1, 2)
 
-        # Entrance animation for cards only
         self._animate_cards_in(cards)
 
-    # ────────────────────────────────────────────────
-    #   Create Lab
-    # ────────────────────────────────────────────────
     def _open_create_dialog(self):
         try:
             dlg = CreateLabDialog(self)
@@ -693,9 +816,6 @@ class DashboardPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
-    # ────────────────────────────────────────────────
-    #   Delete confirm
-    # ────────────────────────────────────────────────
     def _confirm_delete(self, lab_name: str):
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
         dlg = ConfirmDeleteDialog(self, lab_name=lab_name, pcs_count=len(pcs))

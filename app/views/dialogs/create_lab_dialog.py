@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QLineEdit, QSpinBox
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QPainter, QColor, QPen, QFont
 
 
 @dataclass
@@ -19,14 +20,17 @@ class CreateLabResult:
 
 class CreateLabDialog(QDialog):
     """
-    Modern Create Lab dialog (Delete-dialog-like):
+    Create Lab dialog (Delete-dialog-like):
     - Frameless + translucent background
-    - Rounded black card
+    - Rounded card container
+    - Custom icon (drawn)
     - Title + subtitle
-    - Form rows with clean inputs
-    - IP range is TYPEABLE (start IP + end IP)
+    - Layout chips (Sections/Rows/Cols)
+    - IP Range is TYPEABLE (start + end)
     - Live validation + warning pill
     - Fade-in animation
+
+    NOTE: Functionality is unchanged (get_data structure, validation rules, etc.)
     """
 
     def __init__(self, parent=None):
@@ -41,7 +45,7 @@ class CreateLabDialog(QDialog):
         self._build_ui()
         self._wire_signals()
         self._animate_in()
-        self._validate_live()  # initial state
+        self._validate_live()
 
     # ---------------- UI ----------------
     def _build_ui(self):
@@ -49,24 +53,64 @@ class CreateLabDialog(QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.card = QFrame(self)
-        self.card.setObjectName("CreateLabCard")
-        self.card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        card = QFrame(self)
+        card.setObjectName("CreateLabCard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        layout = QVBoxLayout(self.card)
-        layout.setContentsMargins(26, 24, 26, 20)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(24, 22, 24, 18)
         layout.setSpacing(16)
 
-        # Header
+        # --- Header row (icon + title/subtitle) ---
+        header = QHBoxLayout()
+        header.setSpacing(16)
+
+        icon_container = QFrame()
+        icon_container.setObjectName("CreateLabIconContainer")
+        icon_container.setFixedSize(48, 48)
+
+        class PlusIcon(QLabel):
+            def paintEvent(self, event):
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.Antialiasing)
+
+                # Background circle (theme handled by QSS via container; keep subtle here)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(59, 130, 246, 40))
+                painter.drawEllipse(4, 4, 40, 40)
+
+                # Plus sign
+                painter.setPen(QPen(QColor(59, 130, 246), 2.2))
+                cx, cy = 24, 24
+                painter.drawLine(cx, cy - 8, cx, cy + 8)
+                painter.drawLine(cx - 8, cy, cx + 8, cy)
+
+        icon_label = PlusIcon()
+        icon_label.setFixedSize(48, 48)
+
+        icon_lay = QVBoxLayout(icon_container)
+        icon_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lay.addWidget(icon_label, 0, Qt.AlignCenter)
+
+        header.addWidget(icon_container)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(6)
+
         title = QLabel("Create New Laboratory")
         title.setObjectName("CreateLabTitle")
-        title.setTextFormat(Qt.PlainText)
-        layout.addWidget(title)
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
 
         subtitle = QLabel("Set layout and enter an IP range for workstation generation.")
         subtitle.setObjectName("CreateLabSubtitle")
         subtitle.setWordWrap(True)
-        layout.addWidget(subtitle)
+        subtitle.setFont(QFont("Segoe UI", 12))
+
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+
+        header.addLayout(title_col, 1)
+        layout.addLayout(header)
 
         # Divider
         divider = QFrame()
@@ -74,33 +118,32 @@ class CreateLabDialog(QDialog):
         divider.setFixedHeight(2)
         layout.addWidget(divider)
 
-        # Form container
+        # ---- Form ----
         form = QVBoxLayout()
         form.setSpacing(12)
 
-        # Lab name row
+        # Lab Name
         form.addWidget(self._row_label("Lab Name", "CreateLabRowLabel"))
         self.lab_name = QLineEdit()
         self.lab_name.setObjectName("CreateLabInput")
         self.lab_name.setPlaceholderText("e.g. CSL 1 & 2")
         form.addWidget(self.lab_name)
 
-        # Layout row
+        # Layout
         form.addWidget(self._row_label("Layout", "CreateLabRowLabel"))
-        layout_row = QHBoxLayout()
-        layout_row.setSpacing(10)
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(10)
 
         self.sections = self._chip_spin("Sections", 1, 50, 3)
         self.rows = self._chip_spin("Rows", 1, 50, 7)
         self.cols = self._chip_spin("Cols", 1, 50, 5)
 
-        layout_row.addWidget(self.sections.container)
-        layout_row.addWidget(self.rows.container)
-        layout_row.addWidget(self.cols.container)
+        chips_row.addWidget(self.sections.container)
+        chips_row.addWidget(self.rows.container)
+        chips_row.addWidget(self.cols.container)
+        form.addLayout(chips_row)
 
-        form.addLayout(layout_row)
-
-        # IP range row (TYPEABLE)
+        # IP Range (TYPEABLE)
         form.addWidget(self._row_label("IP Range", "CreateLabRowLabel"))
         ip_row = QHBoxLayout()
         ip_row.setSpacing(10)
@@ -109,33 +152,32 @@ class CreateLabDialog(QDialog):
         self.ip_start.setObjectName("CreateLabInput")
         self.ip_start.setPlaceholderText("Start IP (e.g. 192.168.10.1)")
 
-        mid = QLabel("—")
-        mid.setObjectName("CreateLabDash")
-        mid.setAlignment(Qt.AlignCenter)
-        mid.setFixedWidth(16)
+        dash = QLabel("—")
+        dash.setObjectName("CreateLabDash")
+        dash.setAlignment(Qt.AlignCenter)
+        dash.setFixedWidth(18)
 
         self.ip_end = QLineEdit()
         self.ip_end.setObjectName("CreateLabInput")
         self.ip_end.setPlaceholderText("End IP (e.g. 192.168.10.99)")
 
         ip_row.addWidget(self.ip_start, 1)
-        ip_row.addWidget(mid)
+        ip_row.addWidget(dash)
         ip_row.addWidget(self.ip_end, 1)
-
         form.addLayout(ip_row)
 
         layout.addLayout(form)
 
-        # Warning pill (like delete dialog)
+        # ---- Warning pill (same vibe as delete) ----
         self.warn = QFrame()
-        self.warn.setObjectName("CreateLabWarningPill")
+        self.warn.setObjectName("CreateLabWarning")
         wlay = QHBoxLayout(self.warn)
         wlay.setContentsMargins(12, 10, 12, 10)
         wlay.setSpacing(10)
 
         self.warn_icon = QLabel("⚠️")
         self.warn_icon.setObjectName("CreateLabWarningIcon")
-        self.warn_icon.setFixedWidth(22)
+        self.warn_icon.setFixedWidth(24)
         self.warn_icon.setAlignment(Qt.AlignCenter)
 
         self.warn_text = QLabel("")
@@ -144,9 +186,10 @@ class CreateLabDialog(QDialog):
 
         wlay.addWidget(self.warn_icon)
         wlay.addWidget(self.warn_text, 1)
+
         layout.addWidget(self.warn)
 
-        # Buttons
+        # ---- Buttons ----
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         btn_row.addStretch()
@@ -158,19 +201,18 @@ class CreateLabDialog(QDialog):
         self.cancel_btn.setFixedWidth(110)
 
         self.create_btn = QPushButton("Create Lab")
-        self.create_btn.setObjectName("CreateLabPrimaryBtn")
+        self.create_btn.setObjectName("CreateLabCreateBtn")
         self.create_btn.setCursor(Qt.PointingHandCursor)
         self.create_btn.setFixedHeight(42)
         self.create_btn.setFixedWidth(150)
 
         btn_row.addWidget(self.cancel_btn)
         btn_row.addWidget(self.create_btn)
-
         layout.addLayout(btn_row)
 
-        root.addWidget(self.card)
+        root.addWidget(card)
 
-        # size similar to delete dialog
+        # Similar footprint to delete dialog (but slightly wider for 2 IP inputs)
         self.setFixedWidth(640)
 
     def _row_label(self, text: str, obj: str) -> QLabel:
@@ -195,14 +237,13 @@ class CreateLabDialog(QDialog):
         sp.setRange(mn, mx)
         sp.setValue(value)
         sp.setButtonSymbols(QSpinBox.NoButtons)
-        sp.setFixedWidth(56)
+        sp.setFixedWidth(60)
         sp.setAlignment(Qt.AlignCenter)
 
         lay.addWidget(cap)
         lay.addStretch()
         lay.addWidget(sp)
 
-        # simple holder
         container.spin = sp
         return type("SpinWrap", (), {"container": container, "spin": sp})
 
@@ -239,15 +280,14 @@ class CreateLabDialog(QDialog):
         if s.version != e.version:
             return None
 
-        # ensure order
         if int(s) > int(e):
             s, e = e, s
 
-        # limit to something safe (avoid UI freeze if someone enters huge range)
+        # safety
         max_generate = 5000
         total = int(e) - int(s) + 1
         if total > max_generate:
-            return []  # signal "too big"
+            return []  # signal too big
         return [str(ipaddress.ip_address(int(s) + i)) for i in range(total)]
 
     def _validate_live(self):
@@ -256,9 +296,7 @@ class CreateLabDialog(QDialog):
         name_ok = bool(self.lab_name.text().strip())
 
         ip_list = self._ip_range_list()
-        ip_ok = ip_list is not None and ip_list != []
         too_big = (ip_list == [])
-
         if too_big:
             self.warn.show()
             self.warn_text.setText("IP range is too large. Please use a smaller range (max 5000 IPs).")
@@ -284,7 +322,6 @@ class CreateLabDialog(QDialog):
             self.create_btn.setEnabled(False)
             return
 
-        # OK
         self.warn.hide()
         self.create_btn.setEnabled(True)
 
@@ -307,12 +344,7 @@ class CreateLabDialog(QDialog):
         )
         self.accept()
 
-    # public API (same “style” as your current usage)
     def get_data(self) -> dict:
-        """
-        Returns same structure you already use in DashboardPage:
-        { lab_name: str, layout: {sections,rows,cols}, ips: [..] }
-        """
         if not self._result:
             return {"lab_name": "", "layout": {"sections": 1, "rows": 1, "cols": 1}, "ips": []}
         return {
