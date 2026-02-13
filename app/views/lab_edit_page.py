@@ -311,8 +311,11 @@ class LabEditPage(QWidget):
         self.lab_combo.addItems(self.inventory_manager.get_all_labs())
 
     def _on_lab_changed(self, lab):
-        if lab:
-            self.load_lab(lab)
+        if not lab:
+            return
+        if getattr(self.state, "current_lab", "") == lab:
+            return
+        self.load_lab(lab)
 
     def _edit_lab_from_popup(self, lab: str):
         if lab:
@@ -363,8 +366,10 @@ class LabEditPage(QWidget):
         
         # Update combo box to match
         index = self.lab_combo.findText(lab_name)
-        if index >= 0:
+        if index >= 0 and self.lab_combo.currentIndex() != index:
+            self.lab_combo.blockSignals(True)
             self.lab_combo.setCurrentIndex(index)
+            self.lab_combo.blockSignals(False)
         
         layout = self.inventory_manager.get_lab_layout(lab_name)
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
