@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
-    QListWidget, QListWidgetItem, QTextEdit, QFrame
+    QListWidget, QListWidgetItem, QTextEdit, QFrame, QLineEdit, QSplitter
 )
 from PySide6.QtCore import Signal, Qt
 import json, os, tempfile
@@ -14,103 +14,192 @@ class SoftwarePage(QWidget):
 
     def __init__(self, inventory_manager, state):
         super().__init__()
-        self.setObjectName("SoftwarePage")  
+        self.setObjectName("SoftwarePage")
 
         self.inventory_manager = inventory_manager
         self.state = state
-        self._build_ui()
         self.workers = []
 
+        self._all_names = list(SOFTWARE_INVENTORY.keys())
+        self._build_ui()
+
+    # ---------------- UI ----------------
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(16)
+        root.setContentsMargins(22, 22, 22, 22)
+        root.setSpacing(14)
 
-        title = QLabel("Select Software & Action")
+        # ===== Header Bar =====
+        header = QFrame()
+        header.setObjectName("Card")  # reuse your card styling (scoped to SoftwarePage)
+        header_lay = QHBoxLayout(header)
+        header_lay.setContentsMargins(14, 12, 14, 12)
+        header_lay.setSpacing(12)
+
+        title_box = QVBoxLayout()
+        title = QLabel("Software Deployment")
         title.setObjectName("PageTitle")
-        root.addWidget(title)
+        subtitle = QLabel("Pick a package and run an operation on selected targets")
+        subtitle.setObjectName("MutedText")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        header_lay.addLayout(title_box)
 
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Operation:"))
-
-        self.action_combo = QComboBox()
-        self.action_combo.addItems(["Install", "Uninstall", "Update", "Verify", "Health Check"])
-        self.action_combo.currentTextChanged.connect(self._on_action)
-        top.addWidget(self.action_combo)
-
-        top.addSpacing(16)
+        header_lay.addStretch()
 
         self.targets_lbl = QLabel("Targets: 0")
         self.targets_lbl.setObjectName("MutedText")
-        top.addWidget(self.targets_lbl)
-
-        top.addStretch()
+        header_lay.addWidget(self.targets_lbl)
 
         back = QPushButton("← Back")
         back.setObjectName("SecondaryBtn")
         back.clicked.connect(self.back_to_lab.emit)
-        top.addWidget(back)
+        header_lay.addWidget(back)
 
-        root.addLayout(top)
+        root.addWidget(header)
 
-        row = QHBoxLayout()
+        # ===== Action Strip =====
+        action_bar = QFrame()
+        action_bar.setObjectName("Card")
+        ab = QHBoxLayout(action_bar)
+        ab.setContentsMargins(14, 12, 14, 12)
+        ab.setSpacing(12)
 
-        left = QFrame(objectName="Card")
-        l = QVBoxLayout(left)
+        op_lbl = QLabel("Operation")
+        op_lbl.setObjectName("MutedText")
+        ab.addWidget(op_lbl)
 
-        left_header = QLabel("Repository Packages")
-        left_header.setObjectName("CardHeader")
-        l.addWidget(left_header)
+        self.action_combo = QComboBox()
+        self.action_combo.addItems(["Install", "Uninstall", "Update", "Verify", "Health Check"])
+        self.action_combo.currentTextChanged.connect(self._on_action)
+        self.action_combo.setFixedWidth(220)
+        ab.addWidget(self.action_combo)
 
-        self.list = QListWidget()
-        for name in SOFTWARE_INVENTORY:
-            it = QListWidgetItem(f"📦 {name}")
-            it.setData(Qt.UserRole, name)
-            self.list.addItem(it)
-        self.list.itemSelectionChanged.connect(self._on_software)
-        l.addWidget(self.list, 1)
-
-        self.sel_lbl = QLabel("No software selected")
-        self.sel_lbl.setObjectName("StatusError")
-        l.addWidget(self.sel_lbl)
-
-        row.addWidget(left, 40)
-
-        right = QFrame(objectName="Card")
-        r = QVBoxLayout(right)
-
-        right_header = QLabel("Deployment Summary")
-        right_header.setObjectName("CardHeader")
-        r.addWidget(right_header)
-
-        self.summary = QLabel("-")
-        self.summary.setObjectName("SummaryText")  # ✅ themed text
-        self.summary.setWordWrap(True)
-        r.addWidget(self.summary)
+        ab.addStretch()
 
         self.final_btn = QPushButton("Finalize Deployment")
         self.final_btn.setObjectName("PrimaryBtn")
         self.final_btn.setEnabled(False)
         self.final_btn.clicked.connect(self._finalize)
-        r.addWidget(self.final_btn)
+        ab.addWidget(self.final_btn)
+
+        root.addWidget(action_bar)
+
+        # ===== Main Split Layout =====
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        # ---------- Left Panel (Packages) ----------
+        left = QFrame()
+        left.setObjectName("Card")
+        left_lay = QVBoxLayout(left)
+        left_lay.setContentsMargins(14, 14, 14, 14)
+        left_lay.setSpacing(10)
+
+        left_header = QLabel("Repository Packages")
+        left_header.setObjectName("CardHeader")
+        left_lay.addWidget(left_header)
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search packages...")
+        self.search.textChanged.connect(self._filter_packages)
+        left_lay.addWidget(self.search)
+
+        self.list = QListWidget()
+        self._populate_list(self._all_names)
+        self.list.itemSelectionChanged.connect(self._on_software)
+        left_lay.addWidget(self.list, 1)
+
+        self.sel_lbl = QLabel("No software selected")
+        self.sel_lbl.setObjectName("StatusError")
+        left_lay.addWidget(self.sel_lbl)
+
+        splitter.addWidget(left)
+
+        # ---------- Right Panel (Summary + Logs) ----------
+        right = QFrame()
+        right.setObjectName("Card")
+        right_lay = QVBoxLayout(right)
+        right_lay.setContentsMargins(14, 14, 14, 14)
+        right_lay.setSpacing(10)
+
+        summary_header = QLabel("Deployment Summary")
+        summary_header.setObjectName("CardHeader")
+        right_lay.addWidget(summary_header)
+
+        self.summary = QLabel("-")
+        self.summary.setObjectName("SummaryText")
+        self.summary.setWordWrap(True)
+        right_lay.addWidget(self.summary)
 
         log_header = QLabel("Live Log")
         log_header.setObjectName("CardHeader")
-        r.addWidget(log_header)
+        right_lay.addWidget(log_header)
 
         self.console = QTextEdit()
         self.console.setObjectName("Console")
         self.console.setReadOnly(True)
-        r.addWidget(self.console, 1)
+        right_lay.addWidget(self.console, 1)
 
-        row.addWidget(right, 60)
-        root.addLayout(row, 1)
+        splitter.addWidget(right)
 
+        # Make right panel wider by default
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+
+        root.addWidget(splitter, 1)
+
+    def _populate_list(self, names):
+        self.list.clear()
+        for name in names:
+            it = QListWidgetItem(f"📦 {name}")
+            it.setData(Qt.UserRole, name)
+            self.list.addItem(it)
+
+    def _filter_packages(self, text: str):
+        t = (text or "").strip().lower()
+        if not t:
+            filtered = self._all_names
+        else:
+            filtered = [n for n in self._all_names if t in n.lower()]
+        self._populate_list(filtered)
+
+        # keep selection if still visible
+        if self.state.selected_software and self.state.selected_software in filtered:
+            for i in range(self.list.count()):
+                item = self.list.item(i)
+                if item.data(Qt.UserRole) == self.state.selected_software:
+                    self.list.setCurrentItem(item)
+                    break
+
+    # ---------------- Lifecycle ----------------
     def on_page_show(self):
         self.targets_lbl.setText(f"Targets: {len(self.state.selected_targets)}")
         self._refresh_summary()
         self._update_button()
 
+        # Sync action combo display with state (optional, no logic change)
+        try:
+            current = (self.state.action or "install").strip().lower()
+            label = current.capitalize()
+            # Special cases:
+            if current == "health check":
+                label = "Health Check"
+            elif current == "uninstall":
+                label = "Uninstall"
+            elif current == "verify":
+                label = "Verify"
+            elif current == "update":
+                label = "Update"
+            elif current == "install":
+                label = "Install"
+            idx = self.action_combo.findText(label, Qt.MatchFixedString)
+            if idx >= 0:
+                self.action_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+
+    # ---------------- Handlers ----------------
     def _on_action(self, t):
         self.state.action = t.lower()
         self._refresh_summary()
@@ -145,6 +234,7 @@ class SoftwarePage(QWidget):
     def _update_button(self):
         self.final_btn.setEnabled(bool(self.state.selected_targets) and bool(self.state.selected_software))
 
+    # ---------------- Deployment (unchanged logic) ----------------
     def _finalize(self):
         software_name = self.state.selected_software
         targets = self.state.selected_targets
