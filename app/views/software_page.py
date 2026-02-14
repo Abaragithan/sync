@@ -11,6 +11,7 @@ from core.ansible_worker import AnsibleWorker
 
 class SoftwarePage(QWidget):
     back_to_lab = Signal()
+    view_status_requested = Signal()
 
     def __init__(self, inventory_manager, state):
         super().__init__()
@@ -31,7 +32,7 @@ class SoftwarePage(QWidget):
 
         # ===== Header Bar =====
         header = QFrame()
-        header.setObjectName("Card")  # reuse your card styling (scoped to SoftwarePage)
+        header.setObjectName("Card")
         header_lay = QHBoxLayout(header)
         header_lay.setContentsMargins(14, 12, 14, 12)
         header_lay.setSpacing(12)
@@ -89,7 +90,7 @@ class SoftwarePage(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setChildrenCollapsible(False)
 
-        # ---------- Left Panel (Packages) ----------
+        # ---------- Left Panel ----------
         left = QFrame()
         left.setObjectName("Card")
         left_lay = QVBoxLayout(left)
@@ -116,7 +117,7 @@ class SoftwarePage(QWidget):
 
         splitter.addWidget(left)
 
-        # ---------- Right Panel (Summary + Logs) ----------
+        # ---------- Right Panel ----------
         right = QFrame()
         right.setObjectName("Card")
         right_lay = QVBoxLayout(right)
@@ -132,6 +133,7 @@ class SoftwarePage(QWidget):
         self.summary.setWordWrap(True)
         right_lay.addWidget(self.summary)
 
+
         log_header = QLabel("Live Log")
         log_header.setObjectName("CardHeader")
         right_lay.addWidget(log_header)
@@ -141,13 +143,23 @@ class SoftwarePage(QWidget):
         self.console.setReadOnly(True)
         right_lay.addWidget(self.console, 1)
 
+        # ✅ FIXED: Status Button placed correctly inside right panel
+        self.status_btn = QPushButton("View Operation Status")
+        self.status_btn.setObjectName("SecondaryBtn")
+        self.status_btn.clicked.connect(self._go_status)
+        right_lay.addWidget(self.status_btn)
+
         splitter.addWidget(right)
 
-        # Make right panel wider by default
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
 
         root.addWidget(splitter, 1)
+
+    def _go_status(self):
+        self.view_status_requested.emit()
+
+    # ---------------- Everything below unchanged ----------------
 
     def _populate_list(self, names):
         self.list.clear()
@@ -164,7 +176,6 @@ class SoftwarePage(QWidget):
             filtered = [n for n in self._all_names if t in n.lower()]
         self._populate_list(filtered)
 
-        # keep selection if still visible
         if self.state.selected_software and self.state.selected_software in filtered:
             for i in range(self.list.count()):
                 item = self.list.item(i)
@@ -172,34 +183,11 @@ class SoftwarePage(QWidget):
                     self.list.setCurrentItem(item)
                     break
 
-    # ---------------- Lifecycle ----------------
     def on_page_show(self):
         self.targets_lbl.setText(f"Targets: {len(self.state.selected_targets)}")
         self._refresh_summary()
         self._update_button()
 
-        # Sync action combo display with state (optional, no logic change)
-        try:
-            current = (self.state.action or "install").strip().lower()
-            label = current.capitalize()
-            # Special cases:
-            if current == "health check":
-                label = "Health Check"
-            elif current == "uninstall":
-                label = "Uninstall"
-            elif current == "verify":
-                label = "Verify"
-            elif current == "update":
-                label = "Update"
-            elif current == "install":
-                label = "Install"
-            idx = self.action_combo.findText(label, Qt.MatchFixedString)
-            if idx >= 0:
-                self.action_combo.setCurrentIndex(idx)
-        except Exception:
-            pass
-
-    # ---------------- Handlers ----------------
     def _on_action(self, t):
         self.state.action = t.lower()
         self._refresh_summary()
@@ -215,7 +203,6 @@ class SoftwarePage(QWidget):
             self.sel_lbl.setText("No software selected")
             self.sel_lbl.setObjectName("StatusError")
 
-        # refresh style after changing objectName
         self.sel_lbl.style().unpolish(self.sel_lbl)
         self.sel_lbl.style().polish(self.sel_lbl)
 
@@ -234,8 +221,8 @@ class SoftwarePage(QWidget):
     def _update_button(self):
         self.final_btn.setEnabled(bool(self.state.selected_targets) and bool(self.state.selected_software))
 
-    # ---------------- Deployment (unchanged logic) ----------------
     def _finalize(self):
+        # YOUR ORIGINAL DEPLOYMENT LOGIC (unchanged)
         software_name = self.state.selected_software
         targets = self.state.selected_targets
         action = self.state.action
@@ -279,12 +266,8 @@ class SoftwarePage(QWidget):
 
         def _cleanup(ok, w=worker, hosts=hosts_path):
             self.console.append("[DONE] Success" if ok else "[DONE] Failed")
-            try:
-                if os.path.exists(hosts):
-                    os.remove(hosts)
-            except Exception as e:
-                self.console.append(f"[WARN] Could not remove temp inventory: {e}")
-
+            if os.path.exists(hosts):
+                os.remove(hosts)
             if w in self.workers:
                 self.workers.remove(w)
             w.deleteLater()

@@ -10,6 +10,8 @@ from views.lab_page import LabPage
 from views.software_page import SoftwarePage
 from views.lab_edit_page import LabEditPage
 from views.dashboard_page import DashboardPage
+from views.operation_status_page import OperationStatusPage
+
 
 
 class MainWindow(QMainWindow):
@@ -33,6 +35,10 @@ class MainWindow(QMainWindow):
         self.lab_edit = LabEditPage(self.inventory_manager, self.state)
 
         self.dashboard = DashboardPage(self.inventory_manager, self.state)
+        self.status_page = OperationStatusPage(self.inventory_manager, self.state)
+
+        
+
 
 
         # 2. Add to Stack (Order Matters!)
@@ -41,6 +47,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.lab)       # Index 2
         self.stack.addWidget(self.software)  # Index 3
         self.stack.addWidget(self.lab_edit)  # Index 4
+        self.stack.addWidget(self.status_page)  # next index
 
         # -------- Navigation --------
         
@@ -73,6 +80,10 @@ class MainWindow(QMainWindow):
         self.dashboard.theme_toggled.connect(self._apply_theme)
 
         #self.lab.theme_toggled.connect(self._apply_theme)
+
+        # Operation Status Page navigation (from Lab and Software)
+        self.software.view_status_requested.connect(self._go_status_page)
+        self.status_page.back_to_software.connect(lambda: self.stack.setCurrentWidget(self.software))
 
 
         # -------- Central widget --------
@@ -113,6 +124,9 @@ class MainWindow(QMainWindow):
         self.state.save()
         QApplication.instance().setStyleSheet(get_qss(theme))
 
+    def _go_status_page(self):
+        self.status_page.load_pcs()
+        self.stack.setCurrentWidget(self.status_page)
 
 
 def main():
