@@ -161,8 +161,10 @@ class LabEditPage(QWidget):
         header_layout.setSpacing(10)
 
         self.back_btn = QPushButton("← Back")
-        self.back_btn.setObjectName("SecondaryBtn")
+        self.back_btn.setObjectName("BackBtn")
         self.back_btn.setFixedWidth(90)
+        self.back_btn.setFixedHeight(36)
+        self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self.back_requested.emit)
         header_layout.addWidget(self.back_btn)
 
@@ -175,11 +177,13 @@ class LabEditPage(QWidget):
 
         # --- Controls Row ---
         controls = QHBoxLayout()
-        controls.setSpacing(5)
+        controls.setSpacing(8)
 
         controls.addWidget(QLabel("Lab:"))
 
         self.lab_combo = LabComboBox()
+        self.lab_combo.setMinimumWidth(200)
+        self.lab_combo.setFixedHeight(36)
         self.lab_combo.currentTextChanged.connect(self._on_lab_changed)
         self.lab_combo.edit_requested.connect(self._edit_lab_from_popup)
         self.lab_combo.delete_requested.connect(self._delete_lab_from_popup)
@@ -187,20 +191,36 @@ class LabEditPage(QWidget):
 
         controls.addStretch()
 
-        # Edit-specific buttons
+        # Edit-specific buttons with distinct colors
         self.add_btn = QPushButton("➕ Add PC")
+        self.add_btn.setObjectName("AddPcBtn")
+        self.add_btn.setFixedHeight(36)
+        self.add_btn.setMinimumWidth(100)
+        self.add_btn.setCursor(Qt.PointingHandCursor)
         self.add_btn.clicked.connect(self._add_pc)
         controls.addWidget(self.add_btn)
 
         self.remove_btn = QPushButton("🗑 Remove PC")
+        self.remove_btn.setObjectName("RemovePcBtn")
+        self.remove_btn.setFixedHeight(36)
+        self.remove_btn.setMinimumWidth(100)
+        self.remove_btn.setCursor(Qt.PointingHandCursor)
         self.remove_btn.clicked.connect(self._remove_pc)
         controls.addWidget(self.remove_btn)
 
-        self.bulk_btn = QPushButton("🔁 Bulk IP Assign")
+        self.bulk_btn = QPushButton("🔁 Bulk IP")
+        self.bulk_btn.setObjectName("BulkIpBtn")
+        self.bulk_btn.setFixedHeight(36)
+        self.bulk_btn.setMinimumWidth(100)
+        self.bulk_btn.setCursor(Qt.PointingHandCursor)
         self.bulk_btn.clicked.connect(self._bulk_ip_assign)
         controls.addWidget(self.bulk_btn)
 
         self.edit_ip_btn = QPushButton("✏ Edit IP")
+        self.edit_ip_btn.setObjectName("EditIpBtn")
+        self.edit_ip_btn.setFixedHeight(36)
+        self.edit_ip_btn.setMinimumWidth(100)
+        self.edit_ip_btn.setCursor(Qt.PointingHandCursor)
         self.edit_ip_btn.clicked.connect(self._edit_ip)
         controls.addWidget(self.edit_ip_btn)
 
@@ -241,6 +261,240 @@ class LabEditPage(QWidget):
 
         f.addStretch()
         root.addWidget(footer)
+
+        # Apply button styles
+        self._apply_button_styles()
+
+    def _apply_button_styles(self):
+        """Apply distinct colors for each button in both dark and light modes"""
+        theme = getattr(self.state, "theme", "dark")
+        
+        if theme == "light":
+            # Light mode styles
+            self.setStyleSheet("""
+                /* Back button - neutral */
+                QPushButton#BackBtn {
+                    background-color: #f1f5f9;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    color: #334155;
+                    font-weight: 600;
+                }
+                QPushButton#BackBtn:hover {
+                    background-color: #e2e8f0;
+                    border: 1px solid #94a3b8;
+                }
+                QPushButton#BackBtn:pressed {
+                    background-color: #cbd5e1;
+                }
+                
+                /* Add PC button - green */
+                QPushButton#AddPcBtn {
+                    background-color: #10b981;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#AddPcBtn:hover {
+                    background-color: #059669;
+                }
+                QPushButton#AddPcBtn:pressed {
+                    background-color: #047857;
+                }
+                
+                /* Remove PC button - red */
+                QPushButton#RemovePcBtn {
+                    background-color: #ef4444;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#RemovePcBtn:hover {
+                    background-color: #dc2626;
+                }
+                QPushButton#RemovePcBtn:pressed {
+                    background-color: #b91c1c;
+                }
+                
+                /* Bulk IP button - purple */
+                QPushButton#BulkIpBtn {
+                    background-color: #8b5cf6;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#BulkIpBtn:hover {
+                    background-color: #7c3aed;
+                }
+                QPushButton#BulkIpBtn:pressed {
+                    background-color: #6d28d9;
+                }
+                
+                /* Edit IP button - blue */
+                QPushButton#EditIpBtn {
+                    background-color: #3b82f6;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#EditIpBtn:hover {
+                    background-color: #2563eb;
+                }
+                QPushButton#EditIpBtn:pressed {
+                    background-color: #1d4ed8;
+                }
+                
+                /* Lab combo box */
+                QComboBox {
+                    background-color: white;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    color: #0f172a;
+                }
+                QComboBox:hover {
+                    border: 1px solid #94a3b8;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    width: 24px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-top: 5px solid #64748b;
+                    width: 0;
+                    height: 0;
+                }
+                
+                /* Footer */
+                QFrame#FooterBar {
+                    background-color: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 10px;
+                }
+                QLabel#SubText {
+                    color: #64748b;
+                }
+            """)
+        else:
+            # Dark mode styles
+            self.setStyleSheet("""
+                /* Back button - neutral dark */
+                QPushButton#BackBtn {
+                    background-color: #2d3a4f;
+                    border: 1px solid #475569;
+                    border-radius: 8px;
+                    color: #e2e8f0;
+                    font-weight: 600;
+                }
+                QPushButton#BackBtn:hover {
+                    background-color: #334155;
+                    border: 1px solid #64748b;
+                }
+                QPushButton#BackBtn:pressed {
+                    background-color: #1e293b;
+                }
+                
+                /* Add PC button - green */
+                QPushButton#AddPcBtn {
+                    background-color: #10b981;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#AddPcBtn:hover {
+                    background-color: #34d399;
+                }
+                QPushButton#AddPcBtn:pressed {
+                    background-color: #059669;
+                }
+                
+                /* Remove PC button - red */
+                QPushButton#RemovePcBtn {
+                    background-color: #ef4444;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#RemovePcBtn:hover {
+                    background-color: #f87171;
+                }
+                QPushButton#RemovePcBtn:pressed {
+                    background-color: #dc2626;
+                }
+                
+                /* Bulk IP button - purple */
+                QPushButton#BulkIpBtn {
+                    background-color: #8b5cf6;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#BulkIpBtn:hover {
+                    background-color: #a78bfa;
+                }
+                QPushButton#BulkIpBtn:pressed {
+                    background-color: #7c3aed;
+                }
+                
+                /* Edit IP button - blue */
+                QPushButton#EditIpBtn {
+                    background-color: #3b82f6;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 600;
+                }
+                QPushButton#EditIpBtn:hover {
+                    background-color: #60a5fa;
+                }
+                QPushButton#EditIpBtn:pressed {
+                    background-color: #2563eb;
+                }
+                
+                /* Lab combo box */
+                QComboBox {
+                    background-color: #1e293b;
+                    border: 1px solid #334155;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    color: #e2e8f0;
+                }
+                QComboBox:hover {
+                    border: 1px solid #475569;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    width: 24px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-top: 5px solid #94a3b8;
+                    width: 0;
+                    height: 0;
+                }
+                
+                /* Footer */
+                QFrame#FooterBar {
+                    background-color: #1e293b;
+                    border: 1px solid #334155;
+                    border-radius: 10px;
+                }
+                QLabel#SubText {
+                    color: #94a3b8;
+                }
+            """)
 
     def _refresh_lab_list(self):
         self.lab_combo.clear()

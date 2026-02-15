@@ -1,4 +1,3 @@
-# app/views/dialogs/glass_messagebox.py
 from __future__ import annotations
 
 import math

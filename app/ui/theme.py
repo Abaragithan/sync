@@ -319,35 +319,108 @@ QLabel#WelcomeLogoFallback {
     color: #94a3b8;
 }
 
-/* --- SOFTWARE PAGE (SCOPED) --- */
+/* --- SOFTWARE PAGE (SCOPED) : CLASSY BLACK --- */
 QWidget#SoftwarePage QFrame#Card {
-    background-color: #111827;
-    border: 1px solid #334155;
-    border-radius: 12px;
+    background-color: rgba(8, 8, 8, 245);          /* deep black */
+    border: 1px solid rgba(255, 255, 255, 28);     /* subtle border */
+    border-radius: 14px;
     padding: 10px;
 }
 
+/* Header titles inside cards */
 QWidget#SoftwarePage QLabel#CardHeader {
-    font-weight: 800;
+    font-weight: 900;
     font-size: 15px;
-    color: #e5e7eb;
-    padding: 6px 2px;
+    color: rgba(255, 255, 255, 235);
+    padding: 8px 6px;
+    background: transparent;
 }
 
+/* Summary text */
 QWidget#SoftwarePage QLabel#SummaryText {
-    color: #e5e7eb;
+    color: rgba(226, 232, 240, 215);
+    background: transparent;
 }
 
-QWidget#SoftwarePage QLabel#StatusError { color: #ff6b6b; }
-QWidget#SoftwarePage QLabel#StatusSuccess { color: #4ecdc4; }
+/* Selected / error status label */
+QWidget#SoftwarePage QLabel#StatusError { color: rgba(248, 113, 113, 1.0); }
+QWidget#SoftwarePage QLabel#StatusSuccess { color: rgba(45, 212, 191, 1.0); }
 
+/* Console */
 QWidget#SoftwarePage QTextEdit#Console {
-    background-color: #0b1220;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    padding: 8px;
-    color: #e5e7eb;
+    background-color: rgba(4, 4, 4, 235);
+    border: 1px solid rgba(255, 255, 255, 20);
+    border-radius: 12px;
+    padding: 10px;
+    color: rgba(226, 232, 240, 225);
 }
+
+/* Inputs (search + combo) scoped */
+QWidget#SoftwarePage QLineEdit,
+QWidget#SoftwarePage QComboBox {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: rgba(226, 232, 240, 235);
+}
+
+QWidget#SoftwarePage QLineEdit:focus,
+QWidget#SoftwarePage QComboBox:focus {
+    border: 1px solid rgba(120, 180, 255, 140);
+    background: rgba(255, 255, 255, 8);
+}
+
+/* Combo dropdown */
+QWidget#SoftwarePage QComboBox QAbstractItemView {
+    background: rgba(10, 10, 10, 250);
+    border: 1px solid rgba(255, 255, 255, 18);
+    color: rgba(226, 232, 240, 235);
+    selection-background-color: rgba(59, 130, 246, 180);
+}
+
+/* Package list */
+QWidget#SoftwarePage QListWidget {
+    background: rgba(0, 0, 0, 150);
+    border: 1px solid rgba(255, 255, 255, 16);
+    border-radius: 12px;
+}
+
+QWidget#SoftwarePage QListWidget::item {
+    padding: 10px 10px;
+    margin: 4px 6px;
+    border-radius: 10px;
+    color: rgba(226, 232, 240, 225);
+}
+
+QWidget#SoftwarePage QListWidget::item:hover {
+    background: rgba(255, 255, 255, 8);
+}
+
+QWidget#SoftwarePage QListWidget::item:selected {
+    background: rgba(59, 130, 246, 160);
+    color: white;
+}
+
+/* Splitter handle (thin classy line) */
+QWidget#SoftwarePage QSplitter::handle {
+    background: rgba(255, 255, 255, 10);
+}
+QWidget#SoftwarePage QSplitter::handle:hover {
+    background: rgba(59, 130, 246, 80);
+}
+
+/* Targets pill (if you used objectName "TargetsPill") */
+QWidget#SoftwarePage QLabel#TargetsPill {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-weight: 900;
+    color: rgba(226, 232, 240, 235);
+}
+
+
 
 /* Card buttons: compact + clean + fits card */
 QFrame#LabCard QPushButton#EditButton,
@@ -1121,30 +1194,38 @@ QLabel#WelcomeLogoFallback {
 QWidget#SoftwarePage QFrame#Card {
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 10px;
 }
 
 QWidget#SoftwarePage QLabel#CardHeader {
-    font-weight: 800;
+    font-weight: 900;
     font-size: 15px;
     color: #0f172a;
     padding: 6px 2px;
 }
 
-QWidget#SoftwarePage QLabel#SummaryText {
-    color: #0f172a;
-}
-
-QWidget#SoftwarePage QLabel#StatusError { color: #dc2626; }
-QWidget#SoftwarePage QLabel#StatusSuccess { color: #0f766e; }
-
-QWidget#SoftwarePage QTextEdit#Console {
+QWidget#SoftwarePage QLineEdit#SoftwareSearch {
     background-color: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 10px;
-    padding: 8px;
+    padding: 10px 12px;
     color: #0f172a;
+}
+
+QWidget#SoftwarePage QListWidget#SoftwareList {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+}
+
+QWidget#SoftwarePage QLabel#TargetsPill {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.10);
+    border-radius: 10px;
+    padding: 6px 10px;
+    color: rgba(15, 23, 42, 0.90);
+    font-weight: 800;
 }
 
 

@@ -1,5 +1,3 @@
-# app/views/dialogs/bulk_ip_dialog.py
-
 from __future__ import annotations
 import re
 

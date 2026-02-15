@@ -192,12 +192,42 @@ class LabPage(QWidget):
         controls.addStretch()
 
         self.create_lab_btn = QPushButton("➕ Create Lab")
+        self.create_lab_btn.setStyleSheet("""
+            QPushButton {
+                background: #059669;
+                color: white;
+                padding: 6px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: #047857;
+            }
+            QPushButton:pressed {
+                background: #065f46;
+            }
+        """)
         self.create_lab_btn.clicked.connect(self._create_lab)
         controls.addWidget(self.create_lab_btn)
 
         controls.addSpacing(12)
 
         self.select_btn = QPushButton("Select PCs")
+        self.select_btn.setStyleSheet("""
+            QPushButton {
+                background: #7c3aed;
+                color: white;
+                padding: 6px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: #6d28d9;
+            }
+            QPushButton:pressed {
+                background: #5b21b6;
+            }
+        """)
         self.select_btn.clicked.connect(self._open_select_menu)
         controls.addWidget(self.select_btn)
 

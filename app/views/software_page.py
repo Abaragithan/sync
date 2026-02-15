@@ -37,25 +37,34 @@ class SoftwarePage(QWidget):
         header_lay.setContentsMargins(14, 12, 14, 12)
         header_lay.setSpacing(12)
 
+        # ✅ Back button moved to LEFT (opposite side)
+        back = QPushButton("← Back")
+        back.setObjectName("SecondaryBtn")
+        back.setCursor(Qt.PointingHandCursor)
+        back.clicked.connect(self.back_to_lab.emit)
+        header_lay.addWidget(back)
+
+        # Title + subtitle
         title_box = QVBoxLayout()
+        title_box.setSpacing(2)
+
         title = QLabel("Software Deployment")
         title.setObjectName("PageTitle")
+
         subtitle = QLabel("Pick a package and run an operation on selected targets")
         subtitle.setObjectName("MutedText")
+
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         header_lay.addLayout(title_box)
 
         header_lay.addStretch()
 
+        # Targets pill on right
         self.targets_lbl = QLabel("Targets: 0")
-        self.targets_lbl.setObjectName("MutedText")
+        self.targets_lbl.setObjectName("TargetsPill")   # ✅ new objectName for better styling
+        self.targets_lbl.setAlignment(Qt.AlignCenter)
         header_lay.addWidget(self.targets_lbl)
-
-        back = QPushButton("← Back")
-        back.setObjectName("SecondaryBtn")
-        back.clicked.connect(self.back_to_lab.emit)
-        header_lay.addWidget(back)
 
         root.addWidget(header)
 
@@ -73,7 +82,8 @@ class SoftwarePage(QWidget):
         self.action_combo = QComboBox()
         self.action_combo.addItems(["Install", "Uninstall", "Update", "Verify", "Health Check"])
         self.action_combo.currentTextChanged.connect(self._on_action)
-        self.action_combo.setFixedWidth(220)
+        self.action_combo.setFixedWidth(240)
+        self.action_combo.setObjectName("SoftwareCombo")
         ab.addWidget(self.action_combo)
 
         ab.addStretch()
@@ -89,6 +99,7 @@ class SoftwarePage(QWidget):
         # ===== Main Split Layout =====
         splitter = QSplitter(Qt.Horizontal)
         splitter.setChildrenCollapsible(False)
+        splitter.setObjectName("SoftwareSplitter")
 
         # ---------- Left Panel ----------
         left = QFrame()
@@ -102,11 +113,13 @@ class SoftwarePage(QWidget):
         left_lay.addWidget(left_header)
 
         self.search = QLineEdit()
+        self.search.setObjectName("SoftwareSearch")
         self.search.setPlaceholderText("Search packages...")
         self.search.textChanged.connect(self._filter_packages)
         left_lay.addWidget(self.search)
 
         self.list = QListWidget()
+        self.list.setObjectName("SoftwareList")
         self._populate_list(self._all_names)
         self.list.itemSelectionChanged.connect(self._on_software)
         left_lay.addWidget(self.list, 1)
@@ -133,7 +146,6 @@ class SoftwarePage(QWidget):
         self.summary.setWordWrap(True)
         right_lay.addWidget(self.summary)
 
-
         log_header = QLabel("Live Log")
         log_header.setObjectName("CardHeader")
         right_lay.addWidget(log_header)
@@ -143,9 +155,10 @@ class SoftwarePage(QWidget):
         self.console.setReadOnly(True)
         right_lay.addWidget(self.console, 1)
 
-        # ✅ FIXED: Status Button placed correctly inside right panel
+        # Status button (same functionality)
         self.status_btn = QPushButton("View Operation Status")
         self.status_btn.setObjectName("SecondaryBtn")
+        self.status_btn.setCursor(Qt.PointingHandCursor)
         self.status_btn.clicked.connect(self._go_status)
         right_lay.addWidget(self.status_btn)
 
