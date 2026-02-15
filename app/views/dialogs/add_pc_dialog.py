@@ -1,5 +1,3 @@
-# app/views/dialogs/bulk_ip_dialog.py
-
 from __future__ import annotations
 import re
 
@@ -18,25 +16,25 @@ _IPV4_REGEX = re.compile(
 )
 
 
-class BulkIpDialog(QDialog):
+class AddPcDialog(QDialog):
     """
-    Same DESIGN as EditPcIpDialog
-    Functionality: keep it simple -> Apply => accept()
+    Same DESIGN as EditPcIpDialog and BulkIpDialog
     """
-    def __init__(self, parent=None, default_start_ip: str = ""):
+    def __init__(self, parent=None, default_name: str = "", default_ip: str = ""):
         super().__init__(parent)
-        self.setObjectName("BulkIpDialog")
-        self.setWindowTitle("Bulk IP Assign")
+        self.setObjectName("AddPcDialog")
+        self.setWindowTitle("Add PC")
         self.setModal(True)
 
         # Frameless + translucent bg
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        # Same size family (you can tweak width)
-        self.setFixedSize(540, 300)
+        # Same size family
+        self.setFixedSize(540, 320)
 
-        self._default_ip = default_start_ip.strip()
+        self._default_name = default_name.strip()
+        self._default_ip = default_ip.strip()
 
         self._build_ui()
         QTimer.singleShot(0, self._animate_in)
@@ -48,7 +46,7 @@ class BulkIpDialog(QDialog):
         root.setSpacing(0)
 
         self.card = QFrame(self)
-        self.card.setObjectName("BulkIpCard")
+        self.card.setObjectName("AddPcCard")
         self.card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         card_lay = QVBoxLayout(self.card)
@@ -59,14 +57,14 @@ class BulkIpDialog(QDialog):
         header = QHBoxLayout()
         header.setSpacing(12)
 
-        icon = QLabel("🧩")
-        icon.setObjectName("BulkIpIcon")
+        icon = QLabel("➕")
+        icon.setObjectName("AddPcIcon")
         icon.setFixedSize(32, 32)
         icon.setAlignment(Qt.AlignCenter)
         icon.setFont(QFont("Segoe UI", 18))
 
-        title = QLabel("Bulk IP Assign")
-        title.setObjectName("BulkIpTitle")
+        title = QLabel("Add New PC")
+        title.setObjectName("AddPcTitle")
         title.setFont(QFont("Segoe UI", 16, QFont.Bold))
 
         header.addWidget(icon)
@@ -74,33 +72,56 @@ class BulkIpDialog(QDialog):
         header.addStretch()
         card_lay.addLayout(header)
 
-        # Description
-        hint = QLabel("Start IP will be used to assign sequential IPs to all PCs in this section.")
-        hint.setObjectName("BulkIpHint")
+        # PC Name row
+        name_row = QHBoxLayout()
+        name_row.setSpacing(12)
+
+        name_lbl = QLabel("PC NAME")
+        name_lbl.setObjectName("AddPcLabel")
+        name_lbl.setFixedWidth(120)
+        name_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setObjectName("AddPcInput")
+        self.name_edit.setPlaceholderText("e.g. PC-106")
+        self.name_edit.setText(self._default_name)
+        self.name_edit.setFixedHeight(42)
+        self.name_edit.setFixedWidth(250)
+        self.name_edit.setAlignment(Qt.AlignCenter)
+
+        name_row.addWidget(name_lbl)
+        name_row.addWidget(self.name_edit)
+        name_row.addStretch()
+        card_lay.addLayout(name_row)
+
+        # IP Address row
+        ip_row = QHBoxLayout()
+        ip_row.setSpacing(12)
+
+        ip_lbl = QLabel("IP ADDRESS")
+        ip_lbl.setObjectName("AddPcLabel")
+        ip_lbl.setFixedWidth(120)
+        ip_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.ip_edit = QLineEdit()
+        self.ip_edit.setObjectName("AddPcInput")
+        self.ip_edit.setPlaceholderText("e.g. 192.168.1.100")
+        self.ip_edit.setText(self._default_ip)
+        self.ip_edit.setFixedHeight(42)
+        self.ip_edit.setFixedWidth(250)
+        self.ip_edit.setAlignment(Qt.AlignCenter)
+
+        ip_row.addWidget(ip_lbl)
+        ip_row.addWidget(self.ip_edit)
+        ip_row.addStretch()
+        card_lay.addLayout(ip_row)
+
+        # Hint text
+        hint = QLabel("Enter a valid PC name and IPv4 address.")
+        hint.setObjectName("AddPcHint")
         hint.setWordWrap(True)
+        hint.setAlignment(Qt.AlignCenter)
         card_lay.addWidget(hint)
-
-        # Start IP row (same row style)
-        row = QHBoxLayout()
-        row.setSpacing(12)
-
-        lbl = QLabel("START IP")
-        lbl.setObjectName("BulkIpLabel")
-        lbl.setFixedWidth(120)
-        lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.start_ip = QLineEdit()
-        self.start_ip.setObjectName("BulkIpInput")
-        self.start_ip.setPlaceholderText("e.g. 192.168.1.100")
-        self.start_ip.setText(self._default_ip)
-        self.start_ip.setFixedHeight(42)
-        self.start_ip.setFixedWidth(200)
-        self.start_ip.setAlignment(Qt.AlignCenter)
-
-        row.addWidget(lbl)
-        row.addWidget(self.start_ip)
-        row.addStretch()
-        card_lay.addLayout(row)
 
         # Spacer (push buttons down)
         card_lay.addSpacerItem(QSpacerItem(20, 10, QSizePolicy.Minimum, QSizePolicy.Expanding))
@@ -113,28 +134,28 @@ class BulkIpDialog(QDialog):
         btn_row.addStretch(1)
 
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("BulkIpCancelBtn")
+        cancel_btn.setObjectName("AddPcCancelBtn")
         cancel_btn.setCursor(Qt.PointingHandCursor)
         cancel_btn.setFixedHeight(42)
         cancel_btn.setFixedWidth(130)
         cancel_btn.clicked.connect(self.reject)
 
-        apply_btn = QPushButton("Apply")
-        apply_btn.setObjectName("BulkIpApplyBtn")
-        apply_btn.setCursor(Qt.PointingHandCursor)
-        apply_btn.setFixedHeight(42)
-        apply_btn.setFixedWidth(130)
-        apply_btn.clicked.connect(self._apply)
+        add_btn = QPushButton("Add PC")
+        add_btn.setObjectName("AddPcAddBtn")
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setFixedHeight(42)
+        add_btn.setFixedWidth(130)
+        add_btn.clicked.connect(self._add)
 
         btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(apply_btn)
+        btn_row.addWidget(add_btn)
         btn_row.addStretch(1)
 
         card_lay.addLayout(btn_row)
 
         root.addWidget(self.card)
 
-        # Apply styles based on theme (same approach)
+        # Apply styles based on theme
         self._apply_styles()
 
     # ---------------- Style ----------------
@@ -145,24 +166,24 @@ class BulkIpDialog(QDialog):
 
         if theme == "light":
             self.setStyleSheet("""
-                QFrame#BulkIpCard {
+                QFrame#AddPcCard {
                     background: white;
                     border: 1px solid #e2e8f0;
                     border-radius: 20px;
                 }
-                QLabel#BulkIpIcon { background: transparent; }
-                QLabel#BulkIpTitle {
+                QLabel#AddPcIcon { background: transparent; }
+                QLabel#AddPcTitle {
                     color: #0f172a;
                     font-size: 16px;
                     font-weight: 800;
                     background: transparent;
                 }
-                QLabel#BulkIpHint {
+                QLabel#AddPcHint {
                     color: #475569;
                     font-size: 13px;
                     background: transparent;
                 }
-                QLabel#BulkIpLabel {
+                QLabel#AddPcLabel {
                     color: #64748b;
                     font-size: 12px;
                     font-weight: 600;
@@ -173,7 +194,7 @@ class BulkIpDialog(QDialog):
                     max-width: 120px;
                     padding-right: 8px;
                 }
-                QLineEdit#BulkIpInput {
+                QLineEdit#AddPcInput {
                     background: #f8fafc;
                     border: 1px solid #e2e8f0;
                     border-radius: 10px;
@@ -182,9 +203,9 @@ class BulkIpDialog(QDialog):
                     font-size: 14px;
                     font-family: 'Consolas', monospace;
                 }
-                QLineEdit#BulkIpInput:focus { border: 1px solid #2563eb; }
+                QLineEdit#AddPcInput:focus { border: 1px solid #2563eb; }
 
-                QPushButton#BulkIpCancelBtn {
+                QPushButton#AddPcCancelBtn {
                     background: white;
                     border: 1px solid #e2e8f0;
                     color: #64748b;
@@ -192,12 +213,12 @@ class BulkIpDialog(QDialog):
                     font-weight: 600;
                     font-size: 13px;
                 }
-                QPushButton#BulkIpCancelBtn:hover {
+                QPushButton#AddPcCancelBtn:hover {
                     background: #f8fafc;
                     border: 1px solid #2563eb;
                     color: #0f172a;
                 }
-                QPushButton#BulkIpApplyBtn {
+                QPushButton#AddPcAddBtn {
                     background: #2563eb;
                     border: none;
                     color: white;
@@ -205,31 +226,31 @@ class BulkIpDialog(QDialog):
                     font-weight: 700;
                     font-size: 13px;
                 }
-                QPushButton#BulkIpApplyBtn:hover { background: #1d4ed8; }
+                QPushButton#AddPcAddBtn:hover { background: #1d4ed8; }
             """)
         else:
-            # ✅ Dark theme: keep it BLACK (not blue)
+            # Dark theme
             self.setStyleSheet("""
-                QFrame#BulkIpCard {
+                QFrame#AddPcCard {
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                               stop:0 #1b1b1b,
                                               stop:1 #0f0f0f);
                     border: 1px solid #2a2a2a;
                     border-radius: 20px;
                 }
-                QLabel#BulkIpIcon { background: transparent; }
-                QLabel#BulkIpTitle {
+                QLabel#AddPcIcon { background: transparent; }
+                QLabel#AddPcTitle {
                     color: #ffffff;
                     font-size: 16px;
                     font-weight: 800;
                     background: transparent;
                 }
-                QLabel#BulkIpHint {
+                QLabel#AddPcHint {
                     color: rgba(226,232,240,170);
                     font-size: 13px;
                     background: transparent;
                 }
-                QLabel#BulkIpLabel {
+                QLabel#AddPcLabel {
                     color: #94a3b8;
                     font-size: 12px;
                     font-weight: 600;
@@ -240,7 +261,7 @@ class BulkIpDialog(QDialog):
                     max-width: 120px;
                     padding-right: 8px;
                 }
-                QLineEdit#BulkIpInput {
+                QLineEdit#AddPcInput {
                     background: #171717;
                     border: 1px solid #2f2f2f;
                     border-radius: 10px;
@@ -249,9 +270,9 @@ class BulkIpDialog(QDialog):
                     font-size: 14px;
                     font-family: 'Consolas', monospace;
                 }
-                QLineEdit#BulkIpInput:focus { border: 1px solid #60a5fa; }
+                QLineEdit#AddPcInput:focus { border: 1px solid #60a5fa; }
 
-                QPushButton#BulkIpCancelBtn {
+                QPushButton#AddPcCancelBtn {
                     background: #171717;
                     border: 1px solid #2f2f2f;
                     color: rgba(226,232,240,190);
@@ -259,12 +280,12 @@ class BulkIpDialog(QDialog):
                     font-weight: 600;
                     font-size: 13px;
                 }
-                QPushButton#BulkIpCancelBtn:hover {
+                QPushButton#AddPcCancelBtn:hover {
                     background: #202020;
                     border: 1px solid #60a5fa;
                     color: white;
                 }
-                QPushButton#BulkIpApplyBtn {
+                QPushButton#AddPcAddBtn {
                     background: #2563eb;
                     border: none;
                     color: white;
@@ -272,7 +293,7 @@ class BulkIpDialog(QDialog):
                     font-weight: 700;
                     font-size: 13px;
                 }
-                QPushButton#BulkIpApplyBtn:hover { background: #1d4ed8; }
+                QPushButton#AddPcAddBtn:hover { background: #1d4ed8; }
             """)
 
     # ---------------- Animation + overlay ----------------
@@ -307,13 +328,27 @@ class BulkIpDialog(QDialog):
         painter.end()
         super().paintEvent(event)
 
-    # ---------------- Functionality (unchanged simple) ----------------
-    def _apply(self):
-        ip = self.start_ip.text().strip()
+    # ---------------- Functionality ----------------
+    def _add(self):
+        name = self.name_edit.text().strip()
+        ip = self.ip_edit.text().strip()
 
-        # optional: keep validation (remove if you truly want 0 logic change)
-        if ip and not _IPV4_REGEX.match(ip):
-            QMessageBox.warning(self, "Invalid IP", "Please enter a valid IPv4 address.")
+        if not name:
+            from .glass_messagebox import show_glass_message
+            show_glass_message(self, "Invalid Input", "Please enter a PC name.", icon=QMessageBox.Warning)
+            return
+
+        if not ip:
+            from .glass_messagebox import show_glass_message
+            show_glass_message(self, "Invalid Input", "Please enter an IP address.", icon=QMessageBox.Warning)
+            return
+
+        if not _IPV4_REGEX.match(ip):
+            from .glass_messagebox import show_glass_message
+            show_glass_message(self, "Invalid IP", "Please enter a valid IPv4 address.", icon=QMessageBox.Warning)
             return
 
         self.accept()
+
+    def values(self):
+        return self.name_edit.text().strip(), self.ip_edit.text().strip()

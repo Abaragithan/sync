@@ -660,6 +660,128 @@ QPushButton#CreateLabCreateBtn:disabled {
     background: rgba(255, 255, 255, 40);
 }
 
+/* =============================== */
+/* ===== EDIT IP DIALOG (DARK) ==== */
+/* =============================== */
+QDialog#EditPcIpDialog,
+QDialog#BulkIpDialog {
+    background: transparent;
+}
+
+QFrame#EditPcIpCard,
+QFrame#BulkIpCard {
+    background-color: rgba(12, 12, 12, 245);   /* ✅ black (not blue) */
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 18px;
+}
+
+QLabel#EditPcIpTitle,
+QLabel#BulkIpTitle {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+QLabel#EditPcIpLabel,
+QLabel#BulkIpLabel {
+    color: rgba(226, 232, 240, 170);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+}
+
+QLabel#EditPcIpPcName {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: rgba(226, 232, 240, 235);
+    font-weight: 800;
+}
+
+QLabel#EditPcIpCurrentLabel {
+    color: rgba(226, 232, 240, 170);
+    font-weight: 700;
+}
+
+QLabel#EditPcIpCurrentValue {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: rgba(226, 232, 240, 240);
+    font-weight: 900;
+    font-family: Consolas, monospace;
+    min-width: 140px;
+}
+
+QFrame#EditPcIpDivider {
+    background: rgba(255, 255, 255, 22);
+    border-radius: 1px;
+}
+
+QLineEdit#EditPcIpInput,
+QLineEdit#BulkIpInput {
+    background: rgba(255, 255, 255, 7);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 14px;
+    padding: 10px 12px;
+    color: rgba(226, 232, 240, 240);
+    font-size: 14px;
+    font-weight: 900;
+    font-family: Consolas, monospace;
+}
+
+QLineEdit#EditPcIpInput:focus,
+QLineEdit#BulkIpInput:focus {
+    border: 1px solid rgba(120, 180, 255, 170);
+    background: rgba(255, 255, 255, 9);
+}
+
+QLabel#BulkIpHint {
+    color: rgba(226, 232, 240, 170);
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 16);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Buttons */
+QPushButton#EditPcIpCancelBtn,
+QPushButton#BulkIpCancelBtn {
+    background: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 26);
+    color: rgba(226, 232, 240, 235);
+    border-radius: 12px;
+    font-weight: 900;
+}
+QPushButton#EditPcIpCancelBtn:hover,
+QPushButton#BulkIpCancelBtn:hover {
+    background: rgba(255, 255, 255, 14);
+    border: 1px solid rgba(120, 180, 255, 120);
+}
+
+QPushButton#EditPcIpSaveBtn,
+QPushButton#BulkIpApplyBtn {
+    background: rgba(59, 130, 246, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.95);
+    color: #ffffff;
+    border-radius: 12px;
+    font-weight: 900;
+}
+QPushButton#EditPcIpSaveBtn:hover,
+QPushButton#BulkIpApplyBtn:hover {
+    background: rgba(37, 99, 235, 1.0);
+    border: 1px solid rgba(37, 99, 235, 1.0);
+}
+QPushButton#EditPcIpSaveBtn:pressed,
+QPushButton#BulkIpApplyBtn:pressed {
+    background: rgba(30, 64, 175, 1.0);
+    border: 1px solid rgba(30, 64, 175, 1.0);
+}
+
 """
 
 
@@ -1395,6 +1517,128 @@ QPushButton#CreateLabCreateBtn:disabled {
 
 #TrashButton:pressed {
     background: rgba(0, 0, 0, 35);
+}
+
+/* =============================== */
+/* ===== EDIT IP DIALOG (LIGHT) === */
+/* =============================== */
+QDialog#EditPcIpDialog,
+QDialog#BulkIpDialog {
+    background: transparent;
+}
+
+QFrame#EditPcIpCard,
+QFrame#BulkIpCard {
+    background-color: rgba(255, 255, 255, 248);
+    border: 1px solid rgba(15, 23, 42, 22);
+    border-radius: 18px;
+}
+
+QLabel#EditPcIpTitle,
+QLabel#BulkIpTitle {
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+QLabel#EditPcIpLabel,
+QLabel#BulkIpLabel {
+    color: rgba(15, 23, 42, 140);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+}
+
+QLabel#EditPcIpPcName {
+    background: rgba(15, 23, 42, 4);
+    border: 1px solid rgba(15, 23, 42, 10);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: rgba(15, 23, 42, 235);
+    font-weight: 800;
+}
+
+QLabel#EditPcIpCurrentLabel {
+    color: rgba(15, 23, 42, 150);
+    font-weight: 700;
+}
+
+QLabel#EditPcIpCurrentValue {
+    background: rgba(15, 23, 42, 4);
+    border: 1px solid rgba(15, 23, 42, 10);
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: rgba(15, 23, 42, 235);
+    font-weight: 900;
+    font-family: Consolas, monospace;
+    min-width: 140px;
+}
+
+QFrame#EditPcIpDivider {
+    background: rgba(15, 23, 42, 16);
+    border-radius: 1px;
+}
+
+QLineEdit#EditPcIpInput,
+QLineEdit#BulkIpInput {
+    background: rgba(15, 23, 42, 4);
+    border: 1px solid rgba(15, 23, 42, 12);
+    border-radius: 14px;
+    padding: 10px 12px;
+    color: rgba(15, 23, 42, 240);
+    font-size: 14px;
+    font-weight: 900;
+    font-family: Consolas, monospace;
+}
+
+QLineEdit#EditPcIpInput:focus,
+QLineEdit#BulkIpInput:focus {
+    border: 1px solid rgba(37, 99, 235, 160);
+    background: rgba(15, 23, 42, 5);
+}
+
+QLabel#BulkIpHint {
+    color: rgba(15, 23, 42, 170);
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Buttons */
+QPushButton#EditPcIpCancelBtn,
+QPushButton#BulkIpCancelBtn {
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 20);
+    color: rgba(15, 23, 42, 220);
+    border-radius: 12px;
+    font-weight: 900;
+}
+QPushButton#EditPcIpCancelBtn:hover,
+QPushButton#BulkIpCancelBtn:hover {
+    background: #f1f5f9;
+    border: 1px solid rgba(37, 99, 235, 110);
+}
+
+QPushButton#EditPcIpSaveBtn,
+QPushButton#BulkIpApplyBtn {
+    background: rgba(59, 130, 246, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.95);
+    color: #ffffff;
+    border-radius: 12px;
+    font-weight: 900;
+}
+QPushButton#EditPcIpSaveBtn:hover,
+QPushButton#BulkIpApplyBtn:hover {
+    background: rgba(37, 99, 235, 1.0);
+    border: 1px solid rgba(37, 99, 235, 1.0);
+}
+QPushButton#EditPcIpSaveBtn:pressed,
+QPushButton#BulkIpApplyBtn:pressed {
+    background: rgba(30, 64, 175, 1.0);
+    border: 1px solid rgba(30, 64, 175, 1.0);
 }
 
 """

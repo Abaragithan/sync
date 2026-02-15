@@ -12,6 +12,8 @@ from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QLinearGradient, QFont
 
 from .dialogs.confirm_delete_dialog import ConfirmDeleteDialog
 from .dialogs.create_lab_dialog import CreateLabDialog
+from .dialogs.glass_messagebox import show_glass_message
+
 import ipaddress
 
 
@@ -811,10 +813,10 @@ class DashboardPage(QWidget):
 
             self.inventory_manager.add_lab_with_layout(data["lab_name"], layout, pcs)
             self.refresh_labs()
-            QMessageBox.information(self, "Success", f"Lab '{data['lab_name']}' created")
+            show_glass_message(self, "Success", f"Lab '{data['lab_name']}' created", QMessageBox.Information)
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            show_glass_message(self, "Error", str(e), QMessageBox.Critical)
 
     def _confirm_delete(self, lab_name: str):
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
@@ -823,6 +825,7 @@ class DashboardPage(QWidget):
         if dlg.exec() == QDialog.Accepted:
             if self.inventory_manager.delete_lab(lab_name):
                 self.refresh_labs()
-                QMessageBox.information(self, "Deleted", f"Lab '{lab_name}' has been deleted.")
+                show_glass_message(self, "Deleted", f"Lab '{lab_name}' has been deleted.", QMessageBox.Information)
+
             else:
-                QMessageBox.critical(self, "Error", f"Failed to delete lab '{lab_name}'.")
+                show_glass_message(self, "Error", f"Failed to delete lab '{lab_name}'.", QMessageBox.Critical)

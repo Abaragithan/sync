@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
-    QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
+    QFrame, QGridLayout, QScrollArea, QMessageBox, QDialog,
     QStyledItemDelegate, QListView, QStyleOptionViewItem, QLineEdit,
     QFormLayout, QDialogButtonBox
 )
@@ -10,6 +12,9 @@ from PySide6.QtWidgets import QStyle
 
 from .widgets.pc_card import PcCard
 from .dialogs.edit_pc_ip_dialog import EditPcIpDialog
+from .dialogs.bulk_ip_dialog import BulkIpDialog
+from .dialogs.add_pc_dialog import AddPcDialog
+from .dialogs.glass_messagebox import show_glass_message
 
 
 class LabComboDelegate(QStyledItemDelegate):
@@ -127,71 +132,6 @@ class LabComboBox(QComboBox):
         return super().eventFilter(obj, event)
 
 
-class AddPcDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Add PC")
-        self.setMinimumSize(420, 200)
-        self.setObjectName("CreateLabDialog")
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft)
-        form.setSpacing(12)
-        form.setContentsMargins(20, 20, 20, 0)
-
-        self.name_in = QLineEdit()
-        self.name_in.setPlaceholderText("e.g., PC-106")
-        self.ip_in = QLineEdit()
-        self.ip_in.setPlaceholderText("e.g., 192.168.132.250")
-
-        form.addRow("PC Name:", self.name_in)
-        form.addRow("IP Address:", self.ip_in)
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def values(self):
-        return self.name_in.text().strip(), self.ip_in.text().strip()
-
-
-class BulkIpDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Bulk IP Assign")
-        self.setMinimumSize(420, 180)
-        self.setObjectName("CreateLabDialog")
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        
-        form = QFormLayout()
-        form.setSpacing(12)
-        form.setContentsMargins(20, 20, 20, 0)
-
-        self.start_ip = QLineEdit()
-        self.start_ip.setPlaceholderText("e.g., 192.168.132.101")
-        form.addRow("Starting IP:", self.start_ip)
-        layout.addLayout(form)
-
-        hint = QLabel("This will assign IPs sequentially to all PCs in this lab.")
-        hint.setObjectName("DialogHintText")
-        layout.addWidget(hint)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def value(self):
-        return self.start_ip.text().strip()
-
-
 class LabEditPage(QWidget):
     back_requested = Signal()
     edit_lab_requested = Signal(str)
@@ -271,7 +211,6 @@ class LabEditPage(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
 
-        # Outer container for vertical centering
         self.wrap = QWidget()
         outer = QVBoxLayout(self.wrap)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -286,7 +225,6 @@ class LabEditPage(QWidget):
         self.wrap_layout.setAlignment(Qt.AlignHCenter)
 
         outer.addWidget(row_holder, 0, Qt.AlignHCenter)
-
         outer.addStretch(1)
 
         self.scroll.setWidget(self.wrap)
@@ -302,11 +240,9 @@ class LabEditPage(QWidget):
         f.addWidget(self.lab_name_lbl)
 
         f.addStretch()
-
         root.addWidget(footer)
 
     def _refresh_lab_list(self):
-        """Refresh the dropdown list of all labs"""
         self.lab_combo.clear()
         self.lab_combo.addItems(self.inventory_manager.get_all_labs())
 
@@ -326,7 +262,15 @@ class LabEditPage(QWidget):
         if not lab:
             return
 
-        if QMessageBox.question(self, "Delete Lab", f"Delete lab '{lab}' completely?") != QMessageBox.Yes:
+        result = show_glass_message(
+            self,
+            "Delete Lab",
+            f"Delete lab '{lab}' completely?",
+            icon=QMessageBox.Question,
+            buttons=QMessageBox.Yes | QMessageBox.No
+        )
+
+        if result != QMessageBox.Yes:
             return
 
         if self.inventory_manager.delete_lab(lab):
@@ -339,6 +283,13 @@ class LabEditPage(QWidget):
 
             self._refresh_lab_list()
             self.lab_combo.hidePopup()
+
+            show_glass_message(
+                self,
+                "Deleted",
+                f"Lab '{lab}' has been deleted.",
+                icon=QMessageBox.Information
+            )
 
     def _clear_sections(self):
         for frame in self.part_frames:
@@ -354,39 +305,35 @@ class LabEditPage(QWidget):
                 w.deleteLater()
 
     def load_lab(self, lab_name: str):
-        """Load and display a specific lab's PCs"""
         print(f"[EDIT] Loading lab: {lab_name}")
         self.state.current_lab = lab_name
         self.state.selected_targets.clear()
-        
+
         self._clear_sections()
-        
+
         self.title.setText(f"Edit Lab – {lab_name}")
         self.lab_name_lbl.setText(f"📁 {lab_name}")
-        
-        # Update combo box to match
+
         index = self.lab_combo.findText(lab_name)
         if index >= 0 and self.lab_combo.currentIndex() != index:
             self.lab_combo.blockSignals(True)
             self.lab_combo.setCurrentIndex(index)
             self.lab_combo.blockSignals(False)
-        
+
         layout = self.inventory_manager.get_lab_layout(lab_name)
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
-        
+
         print(f"[EDIT] Found {len(pcs) if pcs else 0} PCs for {lab_name}")
-        
+
         if not layout or not pcs:
             print(f"[EDIT] No layout or PCs found for {lab_name}")
             return
 
-        # Get the actual number of sections from the layout
         num_sections = layout.get("sections", 1)
         print(f"[EDIT] Lab has {num_sections} sections")
-        
+
         self.wrap_layout.addStretch(1)
 
-        # Create ONLY the sections that actually exist in the layout
         for s in range(num_sections):
             frame = QFrame()
             frame.setObjectName("SectionCard")
@@ -414,60 +361,53 @@ class LabEditPage(QWidget):
 
         self.wrap_layout.addStretch(1)
 
-        # Group PCs by section first
         pcs_by_section = {}
         for pc in pcs:
             section = pc.get("section", 1)
-            if section not in pcs_by_section:
-                pcs_by_section[section] = []
-            pcs_by_section[section].append(pc)
-        
+            pcs_by_section.setdefault(section, []).append(pc)
+
         print(f"[EDIT] PCs grouped into sections: {list(pcs_by_section.keys())}")
-        
-        # Add PC cards to their respective sections
+
         pc_count = 0
         for section_num in range(1, num_sections + 1):
-            if section_num in pcs_by_section:
-                section_pcs = pcs_by_section[section_num]
-                
-                # Sort PCs by row and column for consistent display
-                section_pcs.sort(key=lambda x: (x.get("row", 1), x.get("col", 1)))
-                
-                for pc in section_pcs:
-                    if not pc.get('ip'):
-                        continue
-                        
-                    card = PcCard(pc.get("name", "PC"), pc.get("ip", ""))
-                    card.setFixedSize(60, 60)
+            if section_num not in pcs_by_section:
+                continue
 
-                    # Store PC data in the card
-                    card.pc_data = pc
-                    card.pc_ip = pc.get('ip', '')
-                    card.pc_name = pc.get('name', 'PC')
+            section_pcs = pcs_by_section[section_num]
+            section_pcs.sort(key=lambda x: (x.get("row", 1), x.get("col", 1)))
 
-                    card.toggled.connect(self._on_toggle)
-                    card.delete_requested.connect(lambda ip=pc["ip"]: self._remove_pc_by_ip(ip))
+            for pc in section_pcs:
+                if not pc.get("ip"):
+                    continue
 
-                    self.cards_by_ip[pc["ip"]] = card
+                card = PcCard(pc.get("name", "PC"), pc.get("ip", ""))
+                card.setFixedSize(60, 60)
 
-                    # Get the grid for this section (0-indexed)
-                    grid_index = section_num - 1
-                    if grid_index < len(self.part_grids):
-                        grid = self.part_grids[grid_index]
-                        r = pc.get("row", 1) - 1
-                        c = pc.get("col", 1) - 1
-                        grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
-                        pc_count += 1
-                    else:
-                        print(f"[EDIT] Warning: Section {section_num} grid not found")
-        
+                card.pc_data = pc
+                card.pc_ip = pc.get("ip", "")
+                card.pc_name = pc.get("name", "PC")
+
+                card.toggled.connect(self._on_toggle)
+                card.delete_requested.connect(lambda ip=pc["ip"]: self._remove_pc_by_ip(ip))
+
+                self.cards_by_ip[pc["ip"]] = card
+
+                grid_index = section_num - 1
+                if grid_index < len(self.part_grids):
+                    grid = self.part_grids[grid_index]
+                    r = pc.get("row", 1) - 1
+                    c = pc.get("col", 1) - 1
+                    grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
+                    pc_count += 1
+                else:
+                    print(f"[EDIT] Warning: Section {section_num} grid not found")
+
         print(f"[EDIT] Displayed {pc_count} PC cards for {lab_name}")
 
     def _is_valid_ip(self, ip: str) -> bool:
-        """Basic IP validation"""
         if not ip:
             return False
-        parts = ip.split('.')
+        parts = ip.split(".")
         if len(parts) != 4:
             return False
         for part in parts:
@@ -479,28 +419,22 @@ class LabEditPage(QWidget):
         return True
 
     def _on_toggle(self, ip, selected):
-        """Single selection mode - only one PC can be selected at a time"""
         if selected:
-            # Deselect all other cards
             for card_ip, card in self.cards_by_ip.items():
                 if card_ip != ip:
                     try:
                         card.set_selected(False)
                     except:
                         pass
-            
-            # Add to selection
-            self.state.selected_targets = [ip]  # Only keep the selected one
+            self.state.selected_targets = [ip]
         else:
-            # Remove from selection
             if ip in self.state.selected_targets:
                 self.state.selected_targets.remove(ip)
 
     # -------- Add PC --------
     def _add_pc(self):
-        """Add a new PC to the lab"""
         if not self.state.current_lab:
-            QMessageBox.warning(self, "No Lab", "Load a lab first.")
+            show_glass_message(self, "No Lab", "Load a lab first.", icon=QMessageBox.Warning)
             return
 
         dlg = AddPcDialog(self)
@@ -508,36 +442,29 @@ class LabEditPage(QWidget):
             return
 
         name, ip = dlg.values()
-        
-        # Validate IP format
+
         if not self._is_valid_ip(ip):
-            QMessageBox.warning(self, "Add PC Failed", "Invalid IP address format.")
+            show_glass_message(self, "Add PC Failed", "Invalid IP address format.", icon=QMessageBox.Warning)
             return
-        
-        # Get the lab layout
+
         layout = self.inventory_manager.get_lab_layout(self.state.current_lab)
         if not layout:
-            QMessageBox.warning(self, "Add PC Failed", "Lab layout not found.")
+            show_glass_message(self, "Add PC Failed", "Lab layout not found.", icon=QMessageBox.Warning)
             return
-        
-        # Check for duplicate IP
+
         pcs = self.inventory_manager.get_pcs_for_lab(self.state.current_lab)
         for pc in pcs:
-            if pc.get('ip') == ip:
-                QMessageBox.warning(self, "Add PC Failed", f"Duplicate IP: {ip} already exists in this lab.")
+            if pc.get("ip") == ip:
+                show_glass_message(self, "Add PC Failed", f"Duplicate IP: {ip} already exists in this lab.",
+                                  icon=QMessageBox.Warning)
                 return
-        
-        # Find the next available position
+
         used_positions = set()
         for pc in pcs:
-            used_positions.add((pc.get('section', 1), pc.get('row', 1), pc.get('col', 1)))
-        
-        # Find first empty position
-        section = 1
-        row = 1
-        col = 1
+            used_positions.add((pc.get("section", 1), pc.get("row", 1), pc.get("col", 1)))
+
+        section = row = col = 1
         found = False
-        
         for s in range(1, layout.get("sections", 1) + 1):
             for r in range(1, layout.get("rows", 1) + 1):
                 for c in range(1, layout.get("cols", 1) + 1):
@@ -549,50 +476,48 @@ class LabEditPage(QWidget):
                     break
             if found:
                 break
-        
+
         if not found:
-            QMessageBox.warning(self, "Add PC Failed", "No available position in this lab.")
+            show_glass_message(self, "Add PC Failed", "No available position in this lab.", icon=QMessageBox.Warning)
             return
-        
-        # Generate name if not provided
+
         if not name:
             name = f"PC-{ip.split('.')[-1]}"
-        
-        # Create PC dictionary with all required fields
-        new_pc = {
-            "name": name,
-            "ip": ip,
-            "section": section,
-            "row": row,
-            "col": col
-        }
-        
-        # Add the PC
+
+        new_pc = {"name": name, "ip": ip, "section": section, "row": row, "col": col}
+
         try:
             success = self.inventory_manager.add_pc(self.state.current_lab, new_pc)
             if not success:
-                QMessageBox.warning(self, "Add PC Failed", "Failed to add PC. Possible duplicate IP.")
+                show_glass_message(self, "Add PC Failed", "Failed to add PC. Possible duplicate IP.",
+                                  icon=QMessageBox.Warning)
                 return
         except Exception as e:
-            QMessageBox.warning(self, "Add PC Failed", f"Error adding PC: {str(e)}")
+            show_glass_message(self, "Add PC Failed", f"Error adding PC: {str(e)}", icon=QMessageBox.Warning)
             return
 
-        # Clear selection and reload the lab
         self.state.selected_targets.clear()
         self.load_lab(self.state.current_lab)
-        
-        QMessageBox.information(self, "Success", f"PC {name} added successfully at Section {section}, Row {row}, Col {col}.")
+
+        show_glass_message(self, "Success", f"PC {name} added successfully", icon=QMessageBox.Information)
 
     # -------- Remove PC --------
     def _remove_pc(self):
-        """Remove selected PC"""
         if not self.state.selected_targets:
-            QMessageBox.warning(self, "Remove PC", "Select a PC first.")
+            show_glass_message(self, "Remove PC", "Select a PC first.", icon=QMessageBox.Warning)
             return
 
         ip = self.state.selected_targets[0]
 
-        if QMessageBox.question(self, "Remove PC", f"Remove PC with IP {ip}?") != QMessageBox.Yes:
+        result = show_glass_message(
+            self,
+            "Remove PC",
+            f"Remove PC with IP {ip}?",
+            icon=QMessageBox.Question,
+            buttons=QMessageBox.Yes | QMessageBox.No
+        )
+
+        if result != QMessageBox.Yes:
             return
 
         self.inventory_manager.remove_pc(self.state.current_lab, ip)
@@ -600,8 +525,15 @@ class LabEditPage(QWidget):
         self.load_lab(self.state.current_lab)
 
     def _remove_pc_by_ip(self, ip):
-        """Remove PC by IP (called from card delete button)"""
-        if QMessageBox.question(self, "Remove PC", f"Remove PC with IP {ip}?") != QMessageBox.Yes:
+        result = show_glass_message(
+            self,
+            "Remove PC",
+            f"Remove PC with IP {ip}?",
+            icon=QMessageBox.Question,
+            buttons=QMessageBox.Yes | QMessageBox.No
+        )
+
+        if result != QMessageBox.Yes:
             return
 
         self.inventory_manager.remove_pc(self.state.current_lab, ip)
@@ -611,9 +543,8 @@ class LabEditPage(QWidget):
 
     # -------- Bulk IP Assign --------
     def _bulk_ip_assign(self):
-        """Bulk assign IPs to all PCs"""
         if not self.state.current_lab:
-            QMessageBox.warning(self, "No Lab", "Load a lab first.")
+            show_glass_message(self, "No Lab", "Load a lab first.", icon=QMessageBox.Warning)
             return
 
         dlg = BulkIpDialog(self)
@@ -621,26 +552,25 @@ class LabEditPage(QWidget):
             return
 
         start_ip = dlg.value()
-        
-        # Validate start IP
+
         if not self._is_valid_ip(start_ip):
-            QMessageBox.warning(self, "Bulk Assign Failed", "Invalid IP address format.")
+            show_glass_message(self, "Bulk Assign Failed", "Invalid IP address format.", icon=QMessageBox.Warning)
             return
 
         ok = self.inventory_manager.bulk_assign_ips(self.state.current_lab, start_ip)
         if not ok:
-            QMessageBox.warning(self, "Bulk Assign Failed", "Invalid IP or conflict.")
+            show_glass_message(self, "Bulk Assign Failed", "Invalid IP or conflict.", icon=QMessageBox.Warning)
             return
 
         self.state.selected_targets.clear()
         self.load_lab(self.state.current_lab)
-        QMessageBox.information(self, "Success", "IP addresses assigned successfully.")
+
+        show_glass_message(self, "Success", "IP addresses assigned successfully.", icon=QMessageBox.Information)
 
     # -------- Edit IP --------
     def _edit_ip(self):
-        """Edit IP of selected PC"""
         if not self.state.selected_targets:
-            QMessageBox.warning(self, "Edit IP", "Select a PC first.")
+            show_glass_message(self, "Edit IP", "Select a PC first.", icon=QMessageBox.Warning)
             return
 
         ip = self.state.selected_targets[0]
@@ -648,22 +578,22 @@ class LabEditPage(QWidget):
         if not card:
             return
 
-        name = card.pc_name if hasattr(card, 'pc_name') else "PC"
+        name = card.pc_name if hasattr(card, "pc_name") else "PC"
 
         dlg = EditPcIpDialog(name, ip, self)
         if dlg.exec() != QDialog.Accepted:
             return
 
         new_ip = dlg.new_ip
-        
-        # Validate new IP
+
         if not self._is_valid_ip(new_ip):
-            QMessageBox.warning(self, "IP Error", "Invalid IP address format.")
+            show_glass_message(self, "IP Error", "Invalid IP address format.", icon=QMessageBox.Warning)
             return
 
         if self.inventory_manager.update_pc_ip(self.state.current_lab, ip, new_ip):
             self.state.selected_targets.clear()
             self.load_lab(self.state.current_lab)
-            QMessageBox.information(self, "Success", f"IP updated to {new_ip}.")
+
+            show_glass_message(self, "Success", f"IP updated to {new_ip}.", icon=QMessageBox.Information)
         else:
-            QMessageBox.warning(self, "IP Error", "Invalid or duplicate IP")
+            show_glass_message(self, "IP Error", "Invalid or duplicate IP", icon=QMessageBox.Warning)
