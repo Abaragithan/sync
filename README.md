@@ -65,7 +65,7 @@ Open PowerShell as Administrator on each Windows client and run:
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
 
-.\setup-windows-client.ps1 `
+.\setup-openssh-ansible.ps1 `
   -ControllerIP "10.20.9.154" `
   -PublicKey "ssh-ed25519 AAAA... ansible@sync"
 ```
