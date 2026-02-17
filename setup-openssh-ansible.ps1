@@ -36,13 +36,13 @@ Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "  Sync Deployer - Windows Client Setup"          -ForegroundColor Cyan
 Write-Host "  Controller : $ControllerIP"                    -ForegroundColor Cyan
-Write-Host "  Docker Net : $DockerSubnet"                     -ForegroundColor Cyan
-Write-Host "  SSH User   : $SSHUser"                         -ForegroundColor Cyan
+Write-Host "  Docker Net : $DockerSubnet"                    -ForegroundColor Cyan
+Write-Host "  SSH User   : $SSHUser"                        -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ─────────────────────────────────────────────
-# Step 1 – Install / Enable OpenSSH Server
+# Step 1 - Install / Enable OpenSSH Server
 # ─────────────────────────────────────────────
 Write-Step 1 $TOTAL_STEPS "Installing OpenSSH Server..."
 
@@ -55,22 +55,38 @@ if ($sshCap.State -ne "Installed") {
 }
 
 # ─────────────────────────────────────────────
-# Step 2 – Ensure SSH host keys exist
+# Step 2 - Generate SSH host keys
 # ─────────────────────────────────────────────
 Write-Step 2 $TOTAL_STEPS "Ensuring SSH host keys exist..."
 
-$sshdExe = "C:\Windows\System32\OpenSSH\sshd.exe"
-if (-not (Test-Path $sshdExe)) { Write-Fail "sshd.exe not found at $sshdExe" }
+$sshdExe    = "C:\Windows\System32\OpenSSH\sshd.exe"
+$sshKeygen  = "C:\Windows\System32\OpenSSH\ssh-keygen.exe"
 
-if (-not (Test-Path "C:\ProgramData\ssh\ssh_host_ed25519_key")) {
-  & $sshdExe -t 2>$null | Out-Null
-  Write-Ok "Host keys generated."
-} else {
-  Write-Ok "Host keys already exist."
+if (-not (Test-Path $sshdExe))   { Write-Fail "sshd.exe not found at $sshdExe" }
+if (-not (Test-Path $sshKeygen)) { Write-Fail "ssh-keygen.exe not found at $sshKeygen" }
+
+# Ensure ProgramData\ssh directory exists
+if (-not (Test-Path "C:\ProgramData\ssh")) {
+  New-Item -ItemType Directory -Path "C:\ProgramData\ssh" -Force | Out-Null
+  Write-Ok "Created C:\ProgramData\ssh directory."
 }
 
+# Generate each host key type if missing
+$keyTypes = @("rsa", "ecdsa", "ed25519")
+foreach ($keyType in $keyTypes) {
+  $keyPath = "C:\ProgramData\ssh\ssh_host_${keyType}_key"
+  if (-not (Test-Path $keyPath)) {
+    & $sshKeygen -t $keyType -f $keyPath -N "" -q 2>&1 | Out-Null
+    Write-Ok "Generated $keyType host key."
+  } else {
+    Write-Ok "$keyType host key already exists."
+  }
+}
+
+Write-Ok "Host keys ready."
+
 # ─────────────────────────────────────────────
-# Step 3 – Write clean sshd_config
+# Step 3 - Write clean sshd_config
 # ─────────────────────────────────────────────
 Write-Step 3 $TOTAL_STEPS "Writing sshd_config..."
 
@@ -100,7 +116,7 @@ if ($LASTEXITCODE -ne 0) { Write-Fail "sshd_config validation failed: $result" }
 Write-Ok "sshd_config written and validated."
 
 # ─────────────────────────────────────────────
-# Step 4 – Install public key
+# Step 4 - Install public key
 # ─────────────────────────────────────────────
 Write-Step 4 $TOTAL_STEPS "Installing controller public key..."
 
@@ -116,11 +132,10 @@ icacls $authKeysPath /grant "Administrators:(F)" | Out-Null
 Write-Ok "Public key installed with correct permissions."
 
 # ─────────────────────────────────────────────
-# Step 5 – Enable & activate SSH user account
+# Step 5 - Enable & activate SSH user account
 # ─────────────────────────────────────────────
 Write-Step 5 $TOTAL_STEPS "Configuring SSH user account ($SSHUser)..."
 
-# Check if it's Administrator (built-in)
 if ($SSHUser -eq "Administrator") {
   net user Administrator /active:yes | Out-Null
   if ($SSHUserPassword -ne "") {
@@ -131,7 +146,6 @@ if ($SSHUser -eq "Administrator") {
     Write-Warn "No password set for Administrator (only SSH key auth is enabled)."
   }
 } else {
-  # Check if local user exists
   $localUser = Get-LocalUser -Name $SSHUser -ErrorAction SilentlyContinue
   if (-not $localUser) {
     if ($SSHUserPassword -eq "") { Write-Fail "User '$SSHUser' not found. Provide -SSHUserPassword to create it." }
@@ -142,7 +156,6 @@ if ($SSHUser -eq "Administrator") {
     Write-Ok "User '$SSHUser' already exists."
   }
 
-  # Ensure in Administrators group
   $inAdmins = (Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue) |
               Where-Object { $_.Name -like "*$SSHUser*" }
   if (-not $inAdmins) {
@@ -154,7 +167,7 @@ if ($SSHUser -eq "Administrator") {
 }
 
 # ─────────────────────────────────────────────
-# Step 6 – Enable LocalAccountTokenFilterPolicy
+# Step 6 - Enable LocalAccountTokenFilterPolicy
 # ─────────────────────────────────────────────
 Write-Step 6 $TOTAL_STEPS "Enabling LocalAccountTokenFilterPolicy..."
 
@@ -163,33 +176,32 @@ Set-ItemProperty -Path $regPath -Name LocalAccountTokenFilterPolicy -Value 1 -Ty
 Write-Ok "LocalAccountTokenFilterPolicy set to 1."
 
 # ─────────────────────────────────────────────
-# Step 7 – Firewall rule for SSH (port 22)
+# Step 7 - Firewall rule for SSH (port 22)
 # ─────────────────────────────────────────────
 Write-Step 7 $TOTAL_STEPS "Configuring firewall rule for SSH (port 22)..."
 
 $ruleName   = "OpenSSH-Ansible-SSH"
 $remoteList = @($ControllerIP, $DockerSubnet)
-$remoteCsv  = $remoteList -join ","
 
 $existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
 if (-not $existing) {
   New-NetFirewallRule `
-    -Name        $ruleName `
-    -DisplayName "OpenSSH (Ansible)" `
-    -Enabled     True `
-    -Direction   Inbound `
-    -Protocol    TCP `
-    -Action      Allow `
-    -LocalPort   22 `
-    -RemoteAddress $remoteCsv | Out-Null
+    -Name          $ruleName `
+    -DisplayName   "OpenSSH (Ansible)" `
+    -Enabled       True `
+    -Direction     Inbound `
+    -Protocol      TCP `
+    -Action        Allow `
+    -LocalPort     22 `
+    -RemoteAddress $remoteList | Out-Null
   Write-Ok "Firewall rule created."
 } else {
-  Set-NetFirewallRule -Name $ruleName -RemoteAddress $remoteCsv -Enabled True | Out-Null
+  Set-NetFirewallRule -Name $ruleName -RemoteAddress $remoteList -Enabled True | Out-Null
   Write-Ok "Firewall rule updated."
 }
 
 # ─────────────────────────────────────────────
-# Step 8 – Start / Restart sshd
+# Step 8 - Start / Restart sshd
 # ─────────────────────────────────────────────
 Write-Step 8 $TOTAL_STEPS "Starting sshd service..."
 
