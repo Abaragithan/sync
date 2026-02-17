@@ -1,200 +1,239 @@
-# setup-openssh-ansible.ps1
+# setup-windows-client.ps1
 # Run as Administrator (elevated PowerShell)
-# Purpose: Configure OpenSSH Server on Windows for Ansible over SSH (port 22)
-# Notes:
-# - Works for Windows 10/11.
-# - Optionally restrict firewall to Controller IP/Subnet.
-# - Optional: put an SSH public key to administrators_authorized_keys.
+# Usage:
+#   .\setup-windows-client.ps1 -ControllerIP "10.20.9.154" -PublicKey "ssh-ed25519 AAAA... ansible@sync"
 
 param(
   [Parameter(Mandatory=$true)]
   [string]$ControllerIP,
 
-  [Parameter(Mandatory=$false)]
-  [string]$ControllerSubnet = "",
+  [Parameter(Mandatory=$true)]
+  [string]$PublicKey,
 
   [Parameter(Mandatory=$false)]
-  [ValidateSet("true","false")]
-  [string]$RestrictToController = "true",
+  [string]$DockerSubnet = "172.17.0.0/16",
 
   [Parameter(Mandatory=$false)]
-  [ValidateSet("true","false")]
-  [string]$EnablePasswordAuth = "true",
+  [string]$SSHUser = "Administrator",
 
   [Parameter(Mandatory=$false)]
-  [ValidateSet("true","false")]
-  [string]$EnablePubkeyAuth = "true",
-
-  # If provided, this public key will be written to:
-  # C:\ProgramData\ssh\administrators_authorized_keys
-  # (Recommended if your Ansible user is admin / in Administrators group)
-  [Parameter(Mandatory=$false)]
-  [string]$AdminPublicKey = ""
+  [string]$SSHUserPassword = ""
 )
 
-Write-Host "== OpenSSH Server (port 22) for Ansible ==" -ForegroundColor Cyan
-
-function Fail($msg) {
-  Write-Host $msg -ForegroundColor Red
-  exit 1
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+function Write-Step($n, $total, $msg) {
+  Write-Host "[$n/$total] $msg" -ForegroundColor Cyan
 }
 
-function Ensure-LinePresentInFile {
-  param(
-    [Parameter(Mandatory=$true)][string]$Path,
-    [Parameter(Mandatory=$true)][string]$Line
-  )
-  if (-not (Test-Path $Path)) { return }
-  $content = Get-Content $Path -ErrorAction SilentlyContinue
-  if ($content -notcontains $Line) {
-    Add-Content -Path $Path -Value $Line
-  }
+function Write-Ok($msg)   { Write-Host "  OK: $msg"    -ForegroundColor Green  }
+function Write-Warn($msg) { Write-Host "  WARN: $msg"  -ForegroundColor Yellow }
+function Write-Fail($msg) { Write-Host "  FAIL: $msg"  -ForegroundColor Red; exit 1 }
+
+$TOTAL_STEPS = 8
+Write-Host ""
+Write-Host "================================================" -ForegroundColor Cyan
+Write-Host "  Sync Deployer - Windows Client Setup"          -ForegroundColor Cyan
+Write-Host "  Controller : $ControllerIP"                    -ForegroundColor Cyan
+Write-Host "  Docker Net : $DockerSubnet"                     -ForegroundColor Cyan
+Write-Host "  SSH User   : $SSHUser"                         -ForegroundColor Cyan
+Write-Host "================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ─────────────────────────────────────────────
+# Step 1 – Install / Enable OpenSSH Server
+# ─────────────────────────────────────────────
+Write-Step 1 $TOTAL_STEPS "Installing OpenSSH Server..."
+
+$sshCap = Get-WindowsCapability -Online | Where-Object { $_.Name -like "OpenSSH.Server*" }
+if ($sshCap.State -ne "Installed") {
+  Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
+  Write-Ok "OpenSSH Server installed."
+} else {
+  Write-Ok "OpenSSH Server already installed."
 }
 
-# 1) Install OpenSSH Server
-Write-Host "[1/7] Installing OpenSSH Server (if missing)..."
-try {
-  $cap = Get-WindowsCapability -Online | Where-Object Name -like "OpenSSH.Server*"
-  if (-not $cap) { Fail "OpenSSH.Server capability not found on this Windows build." }
+# ─────────────────────────────────────────────
+# Step 2 – Ensure SSH host keys exist
+# ─────────────────────────────────────────────
+Write-Step 2 $TOTAL_STEPS "Ensuring SSH host keys exist..."
 
-  if ($cap.State -ne "Installed") {
-    Add-WindowsCapability -Online -Name $cap.Name | Out-Null
-  }
-} catch {
-  Fail "Failed to install OpenSSH Server: $($_.Exception.Message)"
+$sshdExe = "C:\Windows\System32\OpenSSH\sshd.exe"
+if (-not (Test-Path $sshdExe)) { Write-Fail "sshd.exe not found at $sshdExe" }
+
+if (-not (Test-Path "C:\ProgramData\ssh\ssh_host_ed25519_key")) {
+  & $sshdExe -t 2>$null | Out-Null
+  Write-Ok "Host keys generated."
+} else {
+  Write-Ok "Host keys already exist."
 }
 
-# 2) Ensure sshd service is running + auto-start
-Write-Host "[2/7] Enabling and starting sshd service..."
-try {
-  Set-Service -Name sshd -StartupType Automatic
-  Start-Service sshd -ErrorAction SilentlyContinue
-} catch {
-  Fail "Failed to start sshd: $($_.Exception.Message)"
-}
+# ─────────────────────────────────────────────
+# Step 3 – Write clean sshd_config
+# ─────────────────────────────────────────────
+Write-Step 3 $TOTAL_STEPS "Writing sshd_config..."
 
-# 3) Configure sshd_config (password/pubkey options)
-Write-Host "[3/7] Configuring sshd_config..."
 $sshdConfig = "C:\ProgramData\ssh\sshd_config"
-if (-not (Test-Path $sshdConfig)) {
-  Fail "sshd_config not found at $sshdConfig (OpenSSH Server install may have failed)."
+
+# Backup existing config
+if (Test-Path $sshdConfig) {
+  $backup = "$sshdConfig.bak"
+  Copy-Item $sshdConfig $backup -Force
+  Write-Ok "Backup saved to $backup"
 }
 
-# Backup
-$backupPath = "$sshdConfig.bak"
-Copy-Item -Path $sshdConfig -Destination $backupPath -Force | Out-Null
+$config = @"
+Port 22
+PubkeyAuthentication yes
+AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+PasswordAuthentication no
+PermitRootLogin no
+Subsystem sftp sftp-server.exe
+"@
 
-# Helper to set or add a config directive (simple + safe)
-function Set-SshdConfigOption {
-  param(
-    [Parameter(Mandatory=$true)][string]$Key,
-    [Parameter(Mandatory=$true)][string]$Value
-  )
+Set-Content $sshdConfig $config -Encoding UTF8
 
-  $lines = Get-Content $sshdConfig
-  $pattern = "^\s*#?\s*$Key\s+.*$"
+# Validate config
+$result = & $sshdExe -t 2>&1
+if ($LASTEXITCODE -ne 0) { Write-Fail "sshd_config validation failed: $result" }
+Write-Ok "sshd_config written and validated."
 
-  if ($lines -match $pattern) {
-    $lines = $lines -replace $pattern, "$Key $Value"
+# ─────────────────────────────────────────────
+# Step 4 – Install public key
+# ─────────────────────────────────────────────
+Write-Step 4 $TOTAL_STEPS "Installing controller public key..."
+
+$authKeysPath = "C:\ProgramData\ssh\administrators_authorized_keys"
+
+Set-Content $authKeysPath $PublicKey -Encoding UTF8
+
+# Fix permissions (CRITICAL for Windows SSH)
+icacls $authKeysPath /inheritance:r | Out-Null
+icacls $authKeysPath /grant "SYSTEM:(F)" | Out-Null
+icacls $authKeysPath /grant "Administrators:(F)" | Out-Null
+
+Write-Ok "Public key installed with correct permissions."
+
+# ─────────────────────────────────────────────
+# Step 5 – Enable & activate SSH user account
+# ─────────────────────────────────────────────
+Write-Step 5 $TOTAL_STEPS "Configuring SSH user account ($SSHUser)..."
+
+# Check if it's Administrator (built-in)
+if ($SSHUser -eq "Administrator") {
+  net user Administrator /active:yes | Out-Null
+  if ($SSHUserPassword -ne "") {
+    net user Administrator $SSHUserPassword | Out-Null
+    Write-Ok "Administrator account enabled and password set."
   } else {
-    $lines += "$Key $Value"
-  }
-  Set-Content -Path $sshdConfig -Value $lines -Encoding ascii
-}
-
-# Security defaults (keep it sane for labs)
-Set-SshdConfigOption -Key "Port" -Value "22"
-Set-SshdConfigOption -Key "PermitRootLogin" -Value "no"
-Set-SshdConfigOption -Key "PubkeyAuthentication" -Value ($(if ($EnablePubkeyAuth -eq "true") { "yes" } else { "no" }))
-Set-SshdConfigOption -Key "PasswordAuthentication" -Value ($(if ($EnablePasswordAuth -eq "true") { "yes" } else { "no" }))
-Set-SshdConfigOption -Key "ChallengeResponseAuthentication" -Value "no"
-Set-SshdConfigOption -Key "UsePAM" -Value "no"
-
-# Make sure SFTP subsystem line exists (some modules/file transfers rely on it)
-# If it's commented, replace will handle it. If missing, add.
-Set-SshdConfigOption -Key "Subsystem" -Value "sftp sftp-server.exe"
-
-# 4) Optionally install admin public key
-Write-Host "[4/7] Configuring admin public key (optional)..."
-if (-not [string]::IsNullOrWhiteSpace($AdminPublicKey)) {
-  $adminAuthKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
-
-  # Write key (overwrite to keep clean)
-  Set-Content -Path $adminAuthKeys -Value $AdminPublicKey -Encoding ascii
-
-  # Fix permissions for administrators_authorized_keys (required by OpenSSH on Windows)
-  # Owner: Administrators, Full control: SYSTEM + Administrators, Read: Users
-  try {
-    icacls $adminAuthKeys /inheritance:r | Out-Null
-    icacls $adminAuthKeys /grant "SYSTEM:F" | Out-Null
-    icacls $adminAuthKeys /grant "BUILTIN\Administrators:F" | Out-Null
-    icacls $adminAuthKeys /grant "BUILTIN\Users:R" | Out-Null
-  } catch {
-    Fail "Failed to set permissions on administrators_authorized_keys: $($_.Exception.Message)"
+    Write-Ok "Administrator account enabled."
+    Write-Warn "No password set for Administrator (only SSH key auth is enabled)."
   }
 } else {
-  Write-Host "No AdminPublicKey provided. Skipping key install."
+  # Check if local user exists
+  $localUser = Get-LocalUser -Name $SSHUser -ErrorAction SilentlyContinue
+  if (-not $localUser) {
+    if ($SSHUserPassword -eq "") { Write-Fail "User '$SSHUser' not found. Provide -SSHUserPassword to create it." }
+    $secPwd = ConvertTo-SecureString $SSHUserPassword -AsPlainText -Force
+    New-LocalUser -Name $SSHUser -Password $secPwd -PasswordNeverExpires | Out-Null
+    Write-Ok "Local user '$SSHUser' created."
+  } else {
+    Write-Ok "User '$SSHUser' already exists."
+  }
+
+  # Ensure in Administrators group
+  $inAdmins = (Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue) |
+              Where-Object { $_.Name -like "*$SSHUser*" }
+  if (-not $inAdmins) {
+    Add-LocalGroupMember -Group "Administrators" -Member $SSHUser | Out-Null
+    Write-Ok "Added '$SSHUser' to Administrators group."
+  } else {
+    Write-Ok "'$SSHUser' is already in Administrators group."
+  }
 }
 
-# 5) Firewall: allow SSH port 22 (optionally restricted)
-Write-Host "[5/7] Configuring Firewall rule for SSH (port 22)..."
-$ruleName = "OpenSSH-Ansible-SSH"
-$remote = @()
+# ─────────────────────────────────────────────
+# Step 6 – Enable LocalAccountTokenFilterPolicy
+# ─────────────────────────────────────────────
+Write-Step 6 $TOTAL_STEPS "Enabling LocalAccountTokenFilterPolicy..."
 
-if ($RestrictToController -eq "true") {
-  if (-not [string]::IsNullOrWhiteSpace($ControllerSubnet)) { $remote += $ControllerSubnet }
-  $remote += $ControllerIP
-  $remoteCsv = ($remote -join ",")
-} else {
-  $remoteCsv = "Any"
-}
+$regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+Set-ItemProperty -Path $regPath -Name LocalAccountTokenFilterPolicy -Value 1 -Type DWord -Force
+Write-Ok "LocalAccountTokenFilterPolicy set to 1."
 
-$existingRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
-if (-not $existingRule) {
-  New-NetFirewallRule -Name $ruleName `
-    -DisplayName "OpenSSH (Ansible) TCP 22" `
-    -Enabled True `
-    -Direction Inbound `
-    -Protocol TCP `
-    -Action Allow `
-    -LocalPort 22 `
+# ─────────────────────────────────────────────
+# Step 7 – Firewall rule for SSH (port 22)
+# ─────────────────────────────────────────────
+Write-Step 7 $TOTAL_STEPS "Configuring firewall rule for SSH (port 22)..."
+
+$ruleName   = "OpenSSH-Ansible-SSH"
+$remoteList = @($ControllerIP, $DockerSubnet)
+$remoteCsv  = $remoteList -join ","
+
+$existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+if (-not $existing) {
+  New-NetFirewallRule `
+    -Name        $ruleName `
+    -DisplayName "OpenSSH (Ansible)" `
+    -Enabled     True `
+    -Direction   Inbound `
+    -Protocol    TCP `
+    -Action      Allow `
+    -LocalPort   22 `
     -RemoteAddress $remoteCsv | Out-Null
+  Write-Ok "Firewall rule created."
 } else {
-  Set-NetFirewallRule -Name $ruleName -Enabled True | Out-Null
-  Set-NetFirewallRule -Name $ruleName -RemoteAddress $remoteCsv | Out-Null
+  Set-NetFirewallRule -Name $ruleName -RemoteAddress $remoteCsv -Enabled True | Out-Null
+  Write-Ok "Firewall rule updated."
 }
 
-# 6) Restart sshd to apply config changes
-Write-Host "[6/7] Restarting sshd..."
-try {
-  Restart-Service sshd
-} catch {
-  Fail "Failed to restart sshd: $($_.Exception.Message)"
-}
+# ─────────────────────────────────────────────
+# Step 8 – Start / Restart sshd
+# ─────────────────────────────────────────────
+Write-Step 8 $TOTAL_STEPS "Starting sshd service..."
 
-# 7) Verification
-Write-Host "[7/7] Verification..." -ForegroundColor Yellow
+Set-Service -Name sshd -StartupType Automatic
+Restart-Service sshd
+Start-Sleep -Seconds 2
 
-Write-Host "`n--- sshd service ---"
-Get-Service sshd | Format-Table -AutoSize
+$svc = Get-Service sshd
+if ($svc.Status -ne "Running") { Write-Fail "sshd failed to start!" }
+Write-Ok "sshd is running."
 
-Write-Host "`n--- Port 22 listening ---"
-try {
-  $listening = Get-NetTCPConnection -LocalPort 22 -State Listen -ErrorAction SilentlyContinue
-  if ($null -eq $listening) {
-    Write-Host "WARNING: Port 22 not in LISTEN state yet. Check sshd logs/config." -ForegroundColor Yellow
-  } else {
-    $listening | Select-Object LocalAddress, LocalPort, State | Format-Table -AutoSize
-  }
-} catch {
-  Write-Host "Could not query TCP listeners: $($_.Exception.Message)" -ForegroundColor Yellow
-}
+# ─────────────────────────────────────────────
+# Verification Summary
+# ─────────────────────────────────────────────
+Write-Host ""
+Write-Host "================================================" -ForegroundColor Green
+Write-Host "  Verification Summary"                           -ForegroundColor Green
+Write-Host "================================================" -ForegroundColor Green
 
-Write-Host "`n--- Firewall Rule + Scope ---"
+Write-Host "`n--- sshd Service ---"
+Get-Service sshd | Select-Object Name, Status, StartType | Format-Table -AutoSize
+
+Write-Host "`n--- Port 22 Listening ---"
+netstat -an | findstr ":22 "
+
+Write-Host "`n--- Firewall Rule ---"
 Get-NetFirewallRule -Name $ruleName | Select-Object Name, Enabled, Direction, Action | Format-Table -AutoSize
-(Get-NetFirewallRule -Name $ruleName | Get-NetFirewallAddressFilter) | Select-Object RemoteAddress | Format-Table -AutoSize
+Get-NetFirewallRule -Name $ruleName | Get-NetFirewallAddressFilter | Select-Object RemoteAddress | Format-Table -AutoSize
 
-Write-Host "`n--- sshd_config (key lines) ---"
-Select-String -Path $sshdConfig -Pattern "^(Port|PasswordAuthentication|PubkeyAuthentication|Subsystem)" | ForEach-Object { $_.Line }
+Write-Host "`n--- administrators_authorized_keys ---"
+Get-Content $authKeysPath
+Write-Host ""
+icacls $authKeysPath
 
-Write-Host "`nDone. OpenSSH is enabled on port 22 for Ansible." -ForegroundColor Green
+Write-Host "`n--- sshd_config ---"
+Get-Content $sshdConfig
+
+Write-Host ""
+Write-Host "================================================" -ForegroundColor Green
+Write-Host "  Setup Complete!"                                 -ForegroundColor Green
+Write-Host ""
+Write-Host "  Test connectivity from your Ansible controller:"
+Write-Host "  ssh -i ~/.ssh/id_ed25519 $SSHUser@$(hostname)" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  Or test with Ansible:"
+Write-Host "  ansible -i inventory/hosts.ini windows_clients -m win_ping" -ForegroundColor Yellow
+Write-Host "================================================" -ForegroundColor Green
