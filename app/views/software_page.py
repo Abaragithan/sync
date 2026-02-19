@@ -13,12 +13,14 @@ class SoftwarePage(QWidget):
     back_to_lab = Signal()
     view_status_requested = Signal()
 
-    def __init__(self, inventory_manager, state):
+    # UPDATED: Added status_page parameter to __init__
+    def __init__(self, inventory_manager, state, status_page=None):
         super().__init__()
         self.setObjectName("SoftwarePage")
 
         self.inventory_manager = inventory_manager
         self.state = state
+        self.status_page = status_page  # Store reference to status page
         self.workers = []
 
         self._all_names = list(SOFTWARE_INVENTORY.keys())
@@ -37,7 +39,7 @@ class SoftwarePage(QWidget):
         header_lay.setContentsMargins(14, 12, 14, 12)
         header_lay.setSpacing(12)
 
-        # ✅ Back button moved to LEFT (opposite side)
+        # Back button
         back = QPushButton("← Back")
         back.setObjectName("SecondaryBtn")
         back.setCursor(Qt.PointingHandCursor)
@@ -62,7 +64,7 @@ class SoftwarePage(QWidget):
 
         # Targets pill on right
         self.targets_lbl = QLabel("Targets: 0")
-        self.targets_lbl.setObjectName("TargetsPill")   # ✅ new objectName for better styling
+        self.targets_lbl.setObjectName("TargetsPill")
         self.targets_lbl.setAlignment(Qt.AlignCenter)
         header_lay.addWidget(self.targets_lbl)
 
@@ -155,7 +157,7 @@ class SoftwarePage(QWidget):
         self.console.setReadOnly(True)
         right_lay.addWidget(self.console, 1)
 
-        # Status button (same functionality)
+        # Status button
         self.status_btn = QPushButton("View Operation Status")
         self.status_btn.setObjectName("SecondaryBtn")
         self.status_btn.setCursor(Qt.PointingHandCursor)
@@ -172,7 +174,7 @@ class SoftwarePage(QWidget):
     def _go_status(self):
         self.view_status_requested.emit()
 
-    # ---------------- Everything below unchanged ----------------
+    # ---------------- Logic ----------------
 
     def _populate_list(self, names):
         self.list.clear()
@@ -235,7 +237,7 @@ class SoftwarePage(QWidget):
         self.final_btn.setEnabled(bool(self.state.selected_targets) and bool(self.state.selected_software))
 
     def _finalize(self):
-        # YOUR ORIGINAL DEPLOYMENT LOGIC (unchanged)
+        # --- START DEPLOYMENT LOGIC ---
         software_name = self.state.selected_software
         targets = self.state.selected_targets
         action = self.state.action
@@ -251,6 +253,10 @@ class SoftwarePage(QWidget):
         if not app_data:
             self.console.append("[ERROR] Software not found in inventory.")
             return
+
+        # UPDATE: Reset all cards to 'running' (Purple) if status page is linked
+        if self.status_page:
+            self.status_page.reset_all("running")
 
         self.console.append(f"[START] {action.upper()} {software_name} on {len(targets)} target(s)")
 
@@ -275,7 +281,12 @@ class SoftwarePage(QWidget):
         worker = AnsibleWorker(cmd)
         self.workers.append(worker)
 
+        # Connect to console
         worker.output_received.connect(lambda msg: self.console.append(msg))
+
+        # UPDATE: Connect logs to status page parser
+        if self.status_page:
+            worker.output_received.connect(self.status_page.handle_log_output)
 
         def _cleanup(ok, w=worker, hosts=hosts_path):
             self.console.append("[DONE] Success" if ok else "[DONE] Failed")

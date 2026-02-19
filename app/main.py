@@ -37,6 +37,8 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage(self.inventory_manager, self.state)
         self.status_page = OperationStatusPage(self.inventory_manager, self.state)
 
+        self.software_page = SoftwarePage(self.inventory_manager, self.state, status_page=self.status_page)
+
         
 
 

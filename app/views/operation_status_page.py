@@ -4,20 +4,55 @@ from PySide6.QtWidgets import (
     QGridLayout, QFrame
 )
 from PySide6.QtCore import Signal, Qt
+import re  # Required for parsing the logs
 
 from .widgets.pc_card import PcCard
 
 
+# Visual Styles for PC Status
+PC_STYLES = """
+/* --- PC Card Colors --- */
+#PcIdle {
+    background-color: #ecf0f1;
+    border: 1px solid #bdc3c7;
+    border-radius: 6px;
+    color: #7f8c8d;
+}
+#PcRun {
+    background-color: #9b59b6; /* Purple-ish / Active */
+    color: white;
+    border-radius: 6px;
+}
+#PcOK {
+    background-color: #2ecc71; /* Green / Success */
+    color: white;
+    border-radius: 6px;
+}
+#PcFail {
+    background-color: #e74c3c; /* Red / Failed */
+    color: white;
+    border-radius: 6px;
+}
+#PcUnreach {
+    background-color: #3498db; /* Blue / Unreachable */
+    color: white;
+    border-radius: 6px;
+}
+#PcQueued {
+    background-color: #f1c40f; /* Yellow / Queued */
+    color: #2c3e50;
+    border-radius: 6px;
+}
+PcCard QLabel {
+    background-color: transparent;
+    color: inherit;
+}
+"""
+
+
 class OperationStatusPage(QWidget):
     """
-    Shows the lab structure (sections/grids) and colors each PC by operation status.
-    Status values:
-        idle        -> default
-        running     -> purple-ish / active
-        success     -> green
-        failed      -> red
-        unreachable -> blue   (cannot reach / network / auth)
-        queued      -> yellow (pc off, will retry later)
+    Shows the lab structure and parses live logs to color PCs automatically.
     """
 
     back_to_software = Signal()
@@ -33,6 +68,9 @@ class OperationStatusPage(QWidget):
         self.part_frames = []
         self.part_grids = []
 
+        # Apply the color styles
+        self.setStyleSheet(PC_STYLES)
+        
         self._build_ui()
 
     # ---------------- UI ----------------
@@ -128,6 +166,45 @@ class OperationStatusPage(QWidget):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+    # ---------------- Logic ----------------
+    
+    def handle_log_output(self, text: str):
+        """
+        Parses raw terminal output (Ansible logs) and updates PC status automatically.
+        Call this whenever a new line of log arrives.
+        """
+        if not text:
+            return
+
+        text_lower = text.lower()
+
+        # 1. Check for UNREACHABLE
+        # Output: "fatal: [192.168.1.5]: UNREACHABLE! => ..."
+        if "unreachable" in text_lower:
+            match = re.search(r'\[([\d\.]+)\]', text)
+            if match:
+                self.update_pc_status(match.group(1), "unreachable")
+
+        # 2. Check for FAILED
+        # Output: "fatal: [192.168.1.5]: FAILED! => ..."
+        elif "failed" in text_lower:
+            match = re.search(r'\[([\d\.]+)\]', text)
+            if match:
+                self.update_pc_status(match.group(1), "failed")
+
+        # 3. Check for SUCCESS (ok or changed)
+        # Output: "ok: [192.168.1.5] => ..." or "changed: [192.168.1.5] => ..."
+        elif "ok: [" in text or "changed: [" in text:
+            match = re.search(r'(ok|changed): \[([\d\.]+)\]', text)
+            if match:
+                self.update_pc_status(match.group(2), "success")
+        
+        # 4. (Optional) Check for SKIPPED
+        elif "skipped: [" in text:
+            match = re.search(r'skipped: \[([\d\.]+)\]', text)
+            if match:
+                self.update_pc_status(match.group(1), "idle")
 
     # ---------------- Public API ----------------
     def load_lab(self):
@@ -236,5 +313,5 @@ class OperationStatusPage(QWidget):
             self.update_pc_status(ip, status)
 
     def load_pcs(self):
-        # Backward compatible name (so main.py doesn't need changes)
+        # Backward compatible name
         self.load_lab()
