@@ -7,6 +7,8 @@ from PySide6.QtCore import Signal, Qt
 import re  # Required for parsing the logs
 
 from .widgets.pc_card import PcCard
+import os
+from app.core.ansible_worker import AnsibleWorker
 
 
 # Visual Styles for PC Status
