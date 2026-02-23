@@ -12,6 +12,7 @@ from views.lab_edit_page import LabEditPage
 from views.dashboard_page import DashboardPage
 from views.operation_status_page import OperationStatusPage
 
+from core.ansible_worker import AnsibleWorker
 
 
 class MainWindow(QMainWindow):
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
 
         self.software_page = SoftwarePage(self.inventory_manager, self.state, status_page=self.status_page)
 
+        self.worker = None
         
 
 

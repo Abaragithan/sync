@@ -212,7 +212,7 @@ class SoftwarePage(QWidget):
         self.state.selected_software = items[0].data(Qt.UserRole) if items else None
 
         if self.state.selected_software:
-            self.sel_lbl.setText(f"✅ Selected: {self.state.selected_software}")
+            self.sel_lbl.setText(f"Selected: {self.state.selected_software}")
             self.sel_lbl.setObjectName("StatusSuccess")
         else:
             self.sel_lbl.setText("No software selected")
@@ -245,6 +245,7 @@ class SoftwarePage(QWidget):
         if not software_name:
             self.console.append("[ERROR] Select a software package first.")
             return
+
         if not targets:
             self.console.append("[ERROR] Select targets first.")
             return
@@ -254,17 +255,30 @@ class SoftwarePage(QWidget):
             self.console.append("[ERROR] Software not found in inventory.")
             return
 
-        # UPDATE: Reset all cards to 'running' (Purple) if status page is linked
+        #  Prevent multiple clicks while running
+        self.final_btn.setEnabled(False)
+        self.status_btn.setEnabled(False)
+
+        # Clear previous log
+        self.console.clear()
+
+        #  Reset all status cards BEFORE starting
         if self.status_page:
-            self.status_page.reset_all("running")
+            self.status_page.reset_all("queued")
 
-        self.console.append(f"[START] {action.upper()} {software_name} on {len(targets)} target(s)")
+        self.console.append(
+            f"[START] {action.upper()} {software_name} "
+            f"on {len(targets)} target(s)\n"
+        )
 
+        # --------- Create Temporary Inventory File ---------
         hosts_content = "[targets]\n" + "\n".join(targets) + "\n"
         fd, hosts_path = tempfile.mkstemp(prefix="sync_hosts_", suffix=".ini")
+
         with os.fdopen(fd, "w") as f:
             f.write(hosts_content)
 
+        # --------- Extra Vars ---------
         ext_vars = {
             "server_ip": SERVER_IP,
             "file_name": app_data.get("file", ""),
@@ -273,28 +287,59 @@ class SoftwarePage(QWidget):
             "app_state": "present" if action in ("install", "update") else "absent"
         }
 
-        ansible_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../ansible")
-        playbook = os.path.join(ansible_dir, "playbooks/master_deploy.yml")
+        ansible_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../ansible"
+        )
 
-        cmd = f"ansible-playbook -i {hosts_path} {playbook} -e '{json.dumps(ext_vars)}'"
+        playbook = os.path.join(
+            ansible_dir,
+            "playbooks/master_deploy_v2.yml"
+        )
 
+        cmd = [
+            "ansible-playbook",
+            "-i", hosts_path,
+            playbook,
+            "-e", json.dumps(ext_vars)
+        ]
+
+        # --------- Create Worker ---------
         worker = AnsibleWorker(cmd)
         self.workers.append(worker)
 
-        # Connect to console
-        worker.output_received.connect(lambda msg: self.console.append(msg))
+        #  Send logs to console
+        worker.output_received.connect(
+            lambda msg: self.console.append(msg)
+        )
 
-        # UPDATE: Connect logs to status page parser
+        # Send logs to Operation Status Page (if linked)
         if self.status_page:
-            worker.output_received.connect(self.status_page.handle_log_output)
+            worker.output_received.connect(
+                self.status_page.handle_log_output
+            )
 
+        # --------- Cleanup After Finish ---------
         def _cleanup(ok, w=worker, hosts=hosts_path):
-            self.console.append("[DONE] Success" if ok else "[DONE] Failed")
+            if ok:
+                self.console.append("\n[DONE] Deployment completed successfully.")
+            else:
+                self.console.append("\n[DONE] Deployment failed.")
+
+            # Restore buttons
+            self.final_btn.setEnabled(True)
+            self.status_btn.setEnabled(True)
+
+            # Remove temp inventory
             if os.path.exists(hosts):
                 os.remove(hosts)
+
             if w in self.workers:
                 self.workers.remove(w)
+
             w.deleteLater()
 
         worker.finished.connect(_cleanup)
+
+        # 🚀 Start Deployment
         worker.start()

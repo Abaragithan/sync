@@ -4,16 +4,13 @@ from PySide6.QtWidgets import (
     QGridLayout, QFrame
 )
 from PySide6.QtCore import Signal, Qt
-import re  # Required for parsing the logs
+import re
 
 from .widgets.pc_card import PcCard
-import os
-from app.core.ansible_worker import AnsibleWorker
 
 
-# Visual Styles for PC Status
+# ---------------- Visual Styles ----------------
 PC_STYLES = """
-/* --- PC Card Colors --- */
 #PcIdle {
     background-color: #ecf0f1;
     border: 1px solid #bdc3c7;
@@ -21,27 +18,27 @@ PC_STYLES = """
     color: #7f8c8d;
 }
 #PcRun {
-    background-color: #9b59b6; /* Purple-ish / Active */
+    background-color: #9b59b6;
     color: white;
     border-radius: 6px;
 }
 #PcOK {
-    background-color: #2ecc71; /* Green / Success */
+    background-color: #2ecc71;
     color: white;
     border-radius: 6px;
 }
 #PcFail {
-    background-color: #e74c3c; /* Red / Failed */
+    background-color: #e74c3c;
     color: white;
     border-radius: 6px;
 }
 #PcUnreach {
-    background-color: #3498db; /* Blue / Unreachable */
+    background-color: #3498db;
     color: white;
     border-radius: 6px;
 }
 #PcQueued {
-    background-color: #f1c40f; /* Yellow / Queued */
+    background-color: #f1c40f;
     color: #2c3e50;
     border-radius: 6px;
 }
@@ -53,9 +50,6 @@ PcCard QLabel {
 
 
 class OperationStatusPage(QWidget):
-    """
-    Shows the lab structure and parses live logs to color PCs automatically.
-    """
 
     back_to_software = Signal()
 
@@ -70,9 +64,18 @@ class OperationStatusPage(QWidget):
         self.part_frames = []
         self.part_grids = []
 
-        # Apply the color styles
+        # -------- Status Tracking --------
+        self.status_counts = {
+            "idle": 0,
+            "queued": 0,
+            "running": 0,
+            "success": 0,
+            "failed": 0,
+            "unreachable": 0
+        }
+        self.current_status = {}
+
         self.setStyleSheet(PC_STYLES)
-        
         self._build_ui()
 
     # ---------------- UI ----------------
@@ -81,19 +84,19 @@ class OperationStatusPage(QWidget):
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(10)
 
-        # ===== Header =====
         header = QHBoxLayout()
-        header.setSpacing(10)
-
         title_box = QVBoxLayout()
+
         title = QLabel("Operation Status")
         title.setObjectName("PageTitle")
+
         subtitle = QLabel("Live results for the selected lab deployment")
         subtitle.setObjectName("MutedText")
+
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-        header.addLayout(title_box)
 
+        header.addLayout(title_box)
         header.addStretch()
 
         back = QPushButton("← Back")
@@ -103,9 +106,10 @@ class OperationStatusPage(QWidget):
 
         root.addLayout(header)
 
-        # ===== Info Row (lab + action + software) =====
+        # -------- Info Row --------
         info = QFrame()
-        info.setObjectName("FooterBar")  # reuse existing bar style
+        info.setObjectName("FooterBar")
+
         info_lay = QHBoxLayout(info)
         info_lay.setContentsMargins(12, 10, 12, 10)
         info_lay.setSpacing(14)
@@ -124,14 +128,15 @@ class OperationStatusPage(QWidget):
 
         info_lay.addStretch()
 
-        # small legend (text only, colors come from PC styles)
-        legend = QLabel("Legend: ✅ Success  ❌ Failed  🟦 Unreachable  🟨 Queued  ⏳ Running")
-        legend.setObjectName("MutedText")
-        info_lay.addWidget(legend)
+        # -------- Live Summary Counter --------
+        self.counter_lbl = QLabel()
+        self.counter_lbl.setObjectName("MutedText")
+        info_lay.addWidget(self.counter_lbl)
 
         root.addWidget(info)
+        self._refresh_counter_label()
 
-        # ===== Scroll Area (same center layout as LabPage) =====
+        # -------- Scroll Area --------
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("QScrollArea{border:none;}")
@@ -155,13 +160,28 @@ class OperationStatusPage(QWidget):
         self.scroll.setWidget(self.wrap)
         root.addWidget(self.scroll, 1)
 
-    # ---------------- Helpers ----------------
+    # ---------------- Counter Refresh ----------------
+    def _refresh_counter_label(self):
+        self.counter_lbl.setText(
+            f"🟢 {self.status_counts['success']}   "
+            f"🔴 {self.status_counts['failed']}   "
+            f"🟦 {self.status_counts['unreachable']}   "
+            f"🟨 {self.status_counts['queued']}   "
+            f"⏳ {self.status_counts['running']}"
+        )
+
+    # ---------------- Internal Helpers ----------------
     def _clear_sections(self):
         for frame in self.part_frames:
             frame.deleteLater()
+
         self.part_frames.clear()
         self.part_grids.clear()
         self.cards_by_ip.clear()
+        self.current_status.clear()
+
+        for key in self.status_counts:
+            self.status_counts[key] = 0
 
         while self.wrap_layout.count():
             item = self.wrap_layout.takeAt(0)
@@ -169,51 +189,39 @@ class OperationStatusPage(QWidget):
             if w:
                 w.deleteLater()
 
-    # ---------------- Logic ----------------
-    
+        self._refresh_counter_label()
+
+    # ---------------- Log Parsing ----------------
     def handle_log_output(self, text: str):
-        """
-        Parses raw terminal output (Ansible logs) and updates PC status automatically.
-        Call this whenever a new line of log arrives.
-        """
         if not text:
             return
 
-        text_lower = text.lower()
+        line = text.strip()
 
-        # 1. Check for UNREACHABLE
-        # Output: "fatal: [192.168.1.5]: UNREACHABLE! => ..."
-        if "unreachable" in text_lower:
-            match = re.search(r'\[([\d\.]+)\]', text)
-            if match:
-                self.update_pc_status(match.group(1), "unreachable")
+        ip_match = re.search(r'\[([\d\.]+)\]', line)
+        if not ip_match:
+            return
 
-        # 2. Check for FAILED
-        # Output: "fatal: [192.168.1.5]: FAILED! => ..."
-        elif "failed" in text_lower:
-            match = re.search(r'\[([\d\.]+)\]', text)
-            if match:
-                self.update_pc_status(match.group(1), "failed")
+        ip = ip_match.group(1)
+        lower = line.lower()
 
-        # 3. Check for SUCCESS (ok or changed)
-        # Output: "ok: [192.168.1.5] => ..." or "changed: [192.168.1.5] => ..."
-        elif "ok: [" in text or "changed: [" in text:
-            match = re.search(r'(ok|changed): \[([\d\.]+)\]', text)
-            if match:
-                self.update_pc_status(match.group(2), "success")
-        
-        # 4. (Optional) Check for SKIPPED
-        elif "skipped: [" in text:
-            match = re.search(r'skipped: \[([\d\.]+)\]', text)
-            if match:
-                self.update_pc_status(match.group(1), "idle")
+        if "unreachable!" in lower:
+            self.update_pc_status(ip, "unreachable")
+            return
+
+        if "failed!" in lower or "fatal:" in lower:
+            self.update_pc_status(ip, "failed")
+            return
+
+        if line.startswith("ok: [") or line.startswith("changed: ["):
+            self.update_pc_status(ip, "success")
+            return
+
+        if line.startswith("skipped: ["):
+            self.update_pc_status(ip, "idle")
 
     # ---------------- Public API ----------------
     def load_lab(self):
-        """
-        Call this when opening the page.
-        It builds the SAME structure as LabPage using current_lab layout.
-        """
         self._clear_sections()
 
         lab = getattr(self.state, "current_lab", "") or ""
@@ -236,7 +244,6 @@ class OperationStatusPage(QWidget):
 
         self.wrap_layout.addStretch(1)
 
-        # Create section frames + grids
         for s in range(layout["sections"]):
             frame = QFrame()
             frame.setObjectName("SectionCard")
@@ -264,56 +271,69 @@ class OperationStatusPage(QWidget):
 
         self.wrap_layout.addStretch(1)
 
-        # Place PCs into correct section/row/col
         for pc in pcs:
             card = PcCard(pc["name"], pc["ip"])
             card.setFixedSize(60, 60)
 
-            # default status = idle
             card.setObjectName("PcIdle")
             card.style().unpolish(card)
             card.style().polish(card)
 
             self.cards_by_ip[pc["ip"]] = card
+            self.current_status[pc["ip"]] = "idle"
+            self.status_counts["idle"] += 1
 
             grid = self.part_grids[pc["section"] - 1]
             r = pc["row"] - 1
             c = pc["col"] - 1
             grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
 
+        self._refresh_counter_label()
+
     def update_pc_status(self, ip: str, status: str):
-        """
-        Change PC color based on result.
-        """
         card = self.cards_by_ip.get(ip)
         if not card:
             return
 
-        s = (status or "").strip().lower()
+        new_status = (status or "").lower()
+        old_status = self.current_status.get(ip)
 
-        if s == "running":
+        if old_status in self.status_counts:
+            self.status_counts[old_status] -= 1
+
+        if new_status in self.status_counts:
+            self.status_counts[new_status] += 1
+
+        self.current_status[ip] = new_status
+
+        if new_status == "running":
             card.setObjectName("PcRun")
-        elif s == "success":
+        elif new_status == "success":
             card.setObjectName("PcOK")
-        elif s == "failed":
+        elif new_status == "failed":
             card.setObjectName("PcFail")
-        elif s == "unreachable":
-            card.setObjectName("PcUnreach")   # blue
-        elif s == "queued":
-            card.setObjectName("PcQueued")    # yellow
+        elif new_status == "unreachable":
+            card.setObjectName("PcUnreach")
+        elif new_status == "queued":
+            card.setObjectName("PcQueued")
         else:
             card.setObjectName("PcIdle")
 
         card.style().unpolish(card)
         card.style().polish(card)
 
+        self._refresh_counter_label()
+
     def reset_all(self, status: str = "idle"):
-        """
-        Set all cards to one status (useful before running again).
-        """
+        for key in self.status_counts:
+            self.status_counts[key] = 0
+
+        self.current_status.clear()
+
         for ip in list(self.cards_by_ip.keys()):
             self.update_pc_status(ip, status)
 
+        self._refresh_counter_label()
+
     def load_pcs(self):
-        # Backward compatible name
         self.load_lab()

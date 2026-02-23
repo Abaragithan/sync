@@ -1,6 +1,6 @@
 ---
 - name: Dynamic Multi-OS Management
-  hosts: "{{ target_host }}"
+  hosts: all   #"{{ target_host }}"
   gather_facts: yes
 
   tasks:
