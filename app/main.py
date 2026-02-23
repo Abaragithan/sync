@@ -12,8 +12,6 @@ from views.lab_edit_page import LabEditPage
 from views.dashboard_page import DashboardPage
 from views.operation_status_page import OperationStatusPage
 
-from core.ansible_worker import AnsibleWorker
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -25,102 +23,70 @@ class MainWindow(QMainWindow):
         self.state = AppState()
         self.state.load()
 
-        # -------- Stack --------
         self.stack = QStackedWidget()
 
-        # 1. Initialize All Pages
+        # Initialize pages ONCE
         self.welcome = WelcomePage()
-        self.dashboard = DashboardPage(self.inventory_manager)
+        self.dashboard = DashboardPage(self.inventory_manager, self.state)
         self.lab = LabPage(self.inventory_manager, self.state)
         self.software = SoftwarePage(self.inventory_manager, self.state)
         self.lab_edit = LabEditPage(self.inventory_manager, self.state)
-
-        self.dashboard = DashboardPage(self.inventory_manager, self.state)
         self.status_page = OperationStatusPage(self.inventory_manager, self.state)
 
-        self.software_page = SoftwarePage(self.inventory_manager, self.state, status_page=self.status_page)
-
-        self.worker = None
-        
-
-
-
-        # 2. Add to Stack (Order Matters!)
-        self.stack.addWidget(self.welcome)   # Index 0
-        self.stack.addWidget(self.dashboard) # Index 1
-        self.stack.addWidget(self.lab)       # Index 2
-        self.stack.addWidget(self.software)  # Index 3
-        self.stack.addWidget(self.lab_edit)  # Index 4
-        self.stack.addWidget(self.status_page)  # next index
+        # Stack order
+        self.stack.addWidget(self.welcome)
+        self.stack.addWidget(self.dashboard)
+        self.stack.addWidget(self.lab)
+        self.stack.addWidget(self.software)
+        self.stack.addWidget(self.lab_edit)
+        self.stack.addWidget(self.status_page)
 
         # -------- Navigation --------
-        
-        # Welcome (0) -> Dashboard (1)
-        self.welcome.go_deployment.connect(lambda: self.stack.setCurrentIndex(1))
 
-        # Dashboard (1) -> Welcome (0) (Back Button)
-        self.dashboard.back_requested.connect(lambda: self.stack.setCurrentIndex(0))
+        self.welcome.go_deployment.connect(lambda: self.stack.setCurrentWidget(self.dashboard))
 
-        # Dashboard (1) -> Lab (2) via handler
+        self.dashboard.back_requested.connect(lambda: self.stack.setCurrentWidget(self.welcome))
         self.dashboard.lab_selected.connect(self._handle_lab_selection)
-
-        # Lab (2) -> Dashboard (1) (Back Button)
-        self.lab.back_requested.connect(lambda: self.stack.setCurrentIndex(1))
-
-        # Dashboard (1) -> Lab Edit (4)
         self.dashboard.edit_lab_requested.connect(self._go_lab_edit)
-
-        # Lab (2) -> Software (3)
-        self.lab.next_to_software.connect(self._go_software)
-
-        # Software (3) -> Lab (2)
-        self.software.back_to_lab.connect(lambda: self.stack.setCurrentIndex(2))
-
-        # Lab (2) <-> Lab Edit (4)
-        self.lab.edit_lab_requested.connect(self._go_lab_edit)
-        self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
-
-        # Theme toggle (LabPage -> App stylesheet)
         self.dashboard.theme_toggled.connect(self._apply_theme)
 
-        #self.lab.theme_toggled.connect(self._apply_theme)
+        self.lab.back_requested.connect(lambda: self.stack.setCurrentWidget(self.dashboard))
+        self.lab.next_to_software.connect(self._go_software)
+        self.lab.edit_lab_requested.connect(self._go_lab_edit)
 
-        # Operation Status Page navigation (from Lab and Software)
+        self.software.back_to_lab.connect(lambda: self.stack.setCurrentWidget(self.lab))
         self.software.view_status_requested.connect(self._go_status_page)
-        self.status_page.back_to_software.connect(lambda: self.stack.setCurrentWidget(self.software))
 
+        self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
 
-        # -------- Central widget --------
+        self.status_page.back_to_software.connect(
+            lambda: self.stack.setCurrentWidget(self.software)
+        )
+
+        # Central widget
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self.stack)
         self.setCentralWidget(w)
 
+    # ---------------- Navigation ----------------
+
     def _go_software(self):
-        self.stack.setCurrentIndex(3)
         self.software.on_page_show()
+        self.stack.setCurrentWidget(self.software)
 
     def _go_lab_edit(self, lab_name: str):
-        print(f"[NAV] Edit lab requested: {lab_name}")
         self.lab_edit.load_lab(lab_name)
-        self.stack.setCurrentIndex(4)
+        self.stack.setCurrentWidget(self.lab_edit)
 
     def _back_from_lab_edit(self):
-        # Force LabPage to refresh from inventory
         self.lab._render_lab()
-        self.stack.setCurrentIndex(2)
+        self.stack.setCurrentWidget(self.lab)
 
     def _handle_lab_selection(self, lab_name: str):
-        """
-        Called when user clicks 'Open' on the Dashboard.
-        """
-        # Use the existing method _on_lab_changed to load data
         self.lab._on_lab_changed(lab_name)
-        
-        # Switch to Lab Page (Index 2)
-        self.stack.setCurrentIndex(2)
-
+        self.stack.setCurrentWidget(self.lab)
 
     def _apply_theme(self, theme: str):
         theme = (theme or "dark").lower()
@@ -135,8 +101,6 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    from ui.theme import get_qss
-   # app.setStyleSheet(get_qss("dark"))  # or state.theme
     win = MainWindow()
     app.setStyleSheet(get_qss(win.state.theme))
     win.show()

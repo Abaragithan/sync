@@ -1,345 +1,237 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
-    QListWidget, QListWidgetItem, QTextEdit, QFrame, QLineEdit, QSplitter
-)
-from PySide6.QtCore import Signal, Qt
-import json, os, tempfile
+# views/software_page.py
+"""
+Software Manager page.
 
-from core.config import SOFTWARE_INVENTORY, SERVER_IP
-from core.ansible_worker import AnsibleWorker
+Dynamically swaps in the correct action form (from action_forms.py)
+whenever the user changes OS or action. Each form is instantiated once
+and cached so state is preserved if the user switches back.
+
+Payload flow:
+  form.payload_ready  →  _on_payload_ready()  →  inventory_manager / Ansible
+                                               →  view_status_requested (navigate away)
+"""
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QComboBox,
+    QFrame, QStackedWidget, QSizePolicy
+)
+from PySide6.QtCore import Qt, Signal
+
+from views.action_forms import get_form
+
+
+# ── button style tokens ───────────────────────────────────────────────────────
+_BTN_IDLE = ""          # inherit from global QSS
+_BTN_ACTIVE = (
+    "background-color: #1a6fd4;"
+    "color: white;"
+    "font-weight: 700;"
+    "border: 2px solid #5aaaff;"
+    "border-radius: 6px;"
+)
+
+# ── human-readable action labels ──────────────────────────────────────────────
+_ACTIONS = [
+    ("install", "Install"),
+    ("remove",  "Remove"),
+    ("update",  "Update"),
+]
 
 
 class SoftwarePage(QWidget):
-    back_to_lab = Signal()
     view_status_requested = Signal()
+    back_to_lab = Signal()
 
-    # UPDATED: Added status_page parameter to __init__
-    def __init__(self, inventory_manager, state, status_page=None):
+    def __init__(self, inventory_manager, state):
         super().__init__()
-        self.setObjectName("SoftwarePage")
-
         self.inventory_manager = inventory_manager
         self.state = state
-        self.status_page = status_page  # Store reference to status page
-        self.workers = []
 
-        self._all_names = list(SOFTWARE_INVENTORY.keys())
+        # Cache: (os_key, action_key) -> form widget already added to stack
+        self._form_cache: dict[tuple[str, str], QWidget] = {}
+
         self._build_ui()
 
-    # ---------------- UI ----------------
+    # ─────────────────────────────────────────────────────────────────────────
+    #  UI construction
+    # ─────────────────────────────────────────────────────────────────────────
+
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 22, 22, 22)
-        root.setSpacing(14)
+        root.setContentsMargins(60, 40, 60, 40)
+        root.setSpacing(0)
 
-        # ===== Header Bar =====
-        header = QFrame()
-        header.setObjectName("Card")
-        header_lay = QHBoxLayout(header)
-        header_lay.setContentsMargins(14, 12, 14, 12)
-        header_lay.setSpacing(12)
+        # ── Top bar ──────────────────────────────────────────────────────────
+        top_bar = QHBoxLayout()
+        self.back_btn = QPushButton("← Back")
+        self.back_btn.clicked.connect(self.back_to_lab.emit)
+        top_bar.addWidget(self.back_btn)
+        top_bar.addStretch()
+        root.addLayout(top_bar)
 
-        # Back button
-        back = QPushButton("← Back")
-        back.setObjectName("SecondaryBtn")
-        back.setCursor(Qt.PointingHandCursor)
-        back.clicked.connect(self.back_to_lab.emit)
-        header_lay.addWidget(back)
+        root.addStretch(2)
 
-        # Title + subtitle
-        title_box = QVBoxLayout()
-        title_box.setSpacing(2)
+        # ── Title ────────────────────────────────────────────────────────────
+        title = QLabel("Software Manager")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 26px; font-weight: 800;")
+        root.addWidget(title)
 
-        title = QLabel("Software Deployment")
-        title.setObjectName("PageTitle")
+        subtitle = QLabel("Configure and push software actions to selected PCs")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("color: gray; margin-bottom: 4px;")
+        root.addWidget(subtitle)
 
-        subtitle = QLabel("Pick a package and run an operation on selected targets")
-        subtitle.setObjectName("MutedText")
+        root.addSpacing(32)
 
-        title_box.addWidget(title)
-        title_box.addWidget(subtitle)
-        header_lay.addLayout(title_box)
+        # ── Card ─────────────────────────────────────────────────────────────
+        card = QFrame()
+        card.setObjectName("SoftwareCard")
+        card.setMaximumWidth(640)
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
 
-        header_lay.addStretch()
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(20)
+        card_layout.setContentsMargins(32, 28, 32, 28)
 
-        # Targets pill on right
-        self.targets_lbl = QLabel("Targets: 0")
-        self.targets_lbl.setObjectName("TargetsPill")
-        self.targets_lbl.setAlignment(Qt.AlignCenter)
-        header_lay.addWidget(self.targets_lbl)
-
-        root.addWidget(header)
-
-        # ===== Action Strip =====
-        action_bar = QFrame()
-        action_bar.setObjectName("Card")
-        ab = QHBoxLayout(action_bar)
-        ab.setContentsMargins(14, 12, 14, 12)
-        ab.setSpacing(12)
-
-        op_lbl = QLabel("Operation")
-        op_lbl.setObjectName("MutedText")
-        ab.addWidget(op_lbl)
-
-        self.action_combo = QComboBox()
-        self.action_combo.addItems(["Install", "Uninstall", "Update", "Verify", "Health Check"])
-        self.action_combo.currentTextChanged.connect(self._on_action)
-        self.action_combo.setFixedWidth(240)
-        self.action_combo.setObjectName("SoftwareCombo")
-        ab.addWidget(self.action_combo)
-
-        ab.addStretch()
-
-        self.final_btn = QPushButton("Finalize Deployment")
-        self.final_btn.setObjectName("PrimaryBtn")
-        self.final_btn.setEnabled(False)
-        self.final_btn.clicked.connect(self._finalize)
-        ab.addWidget(self.final_btn)
-
-        root.addWidget(action_bar)
-
-        # ===== Main Split Layout =====
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        splitter.setObjectName("SoftwareSplitter")
-
-        # ---------- Left Panel ----------
-        left = QFrame()
-        left.setObjectName("Card")
-        left_lay = QVBoxLayout(left)
-        left_lay.setContentsMargins(14, 14, 14, 14)
-        left_lay.setSpacing(10)
-
-        left_header = QLabel("Repository Packages")
-        left_header.setObjectName("CardHeader")
-        left_lay.addWidget(left_header)
-
-        self.search = QLineEdit()
-        self.search.setObjectName("SoftwareSearch")
-        self.search.setPlaceholderText("Search packages...")
-        self.search.textChanged.connect(self._filter_packages)
-        left_lay.addWidget(self.search)
-
-        self.list = QListWidget()
-        self.list.setObjectName("SoftwareList")
-        self._populate_list(self._all_names)
-        self.list.itemSelectionChanged.connect(self._on_software)
-        left_lay.addWidget(self.list, 1)
-
-        self.sel_lbl = QLabel("No software selected")
-        self.sel_lbl.setObjectName("StatusError")
-        left_lay.addWidget(self.sel_lbl)
-
-        splitter.addWidget(left)
-
-        # ---------- Right Panel ----------
-        right = QFrame()
-        right.setObjectName("Card")
-        right_lay = QVBoxLayout(right)
-        right_lay.setContentsMargins(14, 14, 14, 14)
-        right_lay.setSpacing(10)
-
-        summary_header = QLabel("Deployment Summary")
-        summary_header.setObjectName("CardHeader")
-        right_lay.addWidget(summary_header)
-
-        self.summary = QLabel("-")
-        self.summary.setObjectName("SummaryText")
-        self.summary.setWordWrap(True)
-        right_lay.addWidget(self.summary)
-
-        log_header = QLabel("Live Log")
-        log_header.setObjectName("CardHeader")
-        right_lay.addWidget(log_header)
-
-        self.console = QTextEdit()
-        self.console.setObjectName("Console")
-        self.console.setReadOnly(True)
-        right_lay.addWidget(self.console, 1)
-
-        # Status button
-        self.status_btn = QPushButton("View Operation Status")
-        self.status_btn.setObjectName("SecondaryBtn")
-        self.status_btn.setCursor(Qt.PointingHandCursor)
-        self.status_btn.clicked.connect(self._go_status)
-        right_lay.addWidget(self.status_btn)
-
-        splitter.addWidget(right)
-
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
-
-        root.addWidget(splitter, 1)
-
-    def _go_status(self):
-        self.view_status_requested.emit()
-
-    # ---------------- Logic ----------------
-
-    def _populate_list(self, names):
-        self.list.clear()
-        for name in names:
-            it = QListWidgetItem(f"📦 {name}")
-            it.setData(Qt.UserRole, name)
-            self.list.addItem(it)
-
-    def _filter_packages(self, text: str):
-        t = (text or "").strip().lower()
-        if not t:
-            filtered = self._all_names
-        else:
-            filtered = [n for n in self._all_names if t in n.lower()]
-        self._populate_list(filtered)
-
-        if self.state.selected_software and self.state.selected_software in filtered:
-            for i in range(self.list.count()):
-                item = self.list.item(i)
-                if item.data(Qt.UserRole) == self.state.selected_software:
-                    self.list.setCurrentItem(item)
-                    break
-
-    def on_page_show(self):
-        self.targets_lbl.setText(f"Targets: {len(self.state.selected_targets)}")
-        self._refresh_summary()
-        self._update_button()
-
-    def _on_action(self, t):
-        self.state.action = t.lower()
-        self._refresh_summary()
-
-    def _on_software(self):
-        items = self.list.selectedItems()
-        self.state.selected_software = items[0].data(Qt.UserRole) if items else None
-
-        if self.state.selected_software:
-            self.sel_lbl.setText(f"Selected: {self.state.selected_software}")
-            self.sel_lbl.setObjectName("StatusSuccess")
-        else:
-            self.sel_lbl.setText("No software selected")
-            self.sel_lbl.setObjectName("StatusError")
-
-        self.sel_lbl.style().unpolish(self.sel_lbl)
-        self.sel_lbl.style().polish(self.sel_lbl)
-
-        self._refresh_summary()
-        self._update_button()
-
-    def _refresh_summary(self):
-        self.summary.setText(
-            f"Lab: {self.state.current_lab}\n"
-            f"Targets: {len(self.state.selected_targets)}\n"
-            f"Action: {self.state.action.upper()}\n"
-            f"Software: {self.state.selected_software or '-'}\n"
-            f"Target OS: {self.state.target_os.upper()}\n"
+        # ── OS row ───────────────────────────────────────────────────────────
+        os_row = QHBoxLayout()
+        os_lbl = QLabel("Operating System")
+        os_lbl.setStyleSheet("font-weight: 600;")
+        self.os_combo = QComboBox()
+        self.os_combo.addItems(["Windows", "Linux"])
+        self.os_combo.setCurrentText(
+            "Windows" if self.state.target_os == "windows" else "Linux"
         )
+        self.os_combo.currentTextChanged.connect(self._on_os_changed)
+        os_row.addWidget(os_lbl)
+        os_row.addStretch()
+        os_row.addWidget(self.os_combo)
+        card_layout.addLayout(os_row)
 
-    def _update_button(self):
-        self.final_btn.setEnabled(bool(self.state.selected_targets) and bool(self.state.selected_software))
+        # ── Action selector row ───────────────────────────────────────────────
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        self._action_buttons: dict[str, QPushButton] = {}
+        for key, label in _ACTIONS:
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda _=False, k=key: self._on_action_changed(k))
+            action_row.addWidget(btn)
+            self._action_buttons[key] = btn
+        card_layout.addLayout(action_row)
 
-    def _finalize(self):
-        # --- START DEPLOYMENT LOGIC ---
-        software_name = self.state.selected_software
-        targets = self.state.selected_targets
-        action = self.state.action
+        # Thin separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #2a2a2a;")
+        card_layout.addWidget(sep)
 
-        if not software_name:
-            self.console.append("[ERROR] Select a software package first.")
+        # ── Dynamic form area ─────────────────────────────────────────────────
+        self.form_stack = QStackedWidget()
+        card_layout.addWidget(self.form_stack)
+
+        # Centre card
+        centre = QHBoxLayout()
+        centre.addStretch()
+        centre.addWidget(card)
+        centre.addStretch()
+        root.addLayout(centre)
+
+        root.addStretch(3)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  Event handlers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _on_os_changed(self, text: str):
+        self.state.target_os = text.lower()
+        self._swap_form()
+
+    def _on_action_changed(self, action: str):
+        self.state.action = action
+        self._swap_form()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  Form management
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _current_key(self) -> tuple[str, str]:
+        return (self.state.target_os, self.state.action)
+
+    def _swap_form(self):
+        """Show the correct form for the current (os, action) pair."""
+        # Highlight active action button
+        for key, btn in self._action_buttons.items():
+            btn.setStyleSheet(_BTN_ACTIVE if key == self.state.action else _BTN_IDLE)
+
+        key = self._current_key()
+
+        if key not in self._form_cache:
+            form = get_form(*key)
+            if form is None:
+                form = _NoFormPlaceholder(self.state.target_os, self.state.action)
+            form.payload_ready.connect(self._on_payload_ready)
+            self.form_stack.addWidget(form)
+            self._form_cache[key] = form
+
+        self.form_stack.setCurrentWidget(self._form_cache[key])
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  Payload handler
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _on_payload_ready(self, form_payload: dict):
+        if not self.state.selected_targets:
+            print("[SoftwarePage] No PCs selected – aborting.")
             return
 
-        if not targets:
-            self.console.append("[ERROR] Select targets first.")
-            return
-
-        app_data = SOFTWARE_INVENTORY.get(software_name, {})
-        if not app_data:
-            self.console.append("[ERROR] Software not found in inventory.")
-            return
-
-        #  Prevent multiple clicks while running
-        self.final_btn.setEnabled(False)
-        self.status_btn.setEnabled(False)
-
-        # Clear previous log
-        self.console.clear()
-
-        #  Reset all status cards BEFORE starting
-        if self.status_page:
-            self.status_page.reset_all("queued")
-
-        self.console.append(
-            f"[START] {action.upper()} {software_name} "
-            f"on {len(targets)} target(s)\n"
-        )
-
-        # --------- Create Temporary Inventory File ---------
-        hosts_content = "[targets]\n" + "\n".join(targets) + "\n"
-        fd, hosts_path = tempfile.mkstemp(prefix="sync_hosts_", suffix=".ini")
-
-        with os.fdopen(fd, "w") as f:
-            f.write(hosts_content)
-
-        # --------- Extra Vars ---------
-        ext_vars = {
-            "server_ip": SERVER_IP,
-            "file_name": app_data.get("file", ""),
-            "internet_url": app_data.get("url", ""),
-            "package_name": app_data.get("pkg", ""),
-            "app_state": "present" if action in ("install", "update") else "absent"
+        payload = {
+            "lab":     self.state.current_lab,
+            "targets": self.state.selected_targets,
+            **form_payload,          # os, action, and form-specific fields
         }
 
-        ansible_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../ansible"
+        print("[SoftwarePage] Dispatching payload:", payload)
+        # TODO: hand off to inventory_manager / Ansible runner here
+        self.view_status_requested.emit()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  Lifecycle
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def on_page_show(self):
+        """Called by MainWindow each time this page is navigated to."""
+        # Sync OS combo without triggering a redundant swap
+        self.os_combo.blockSignals(True)
+        self.os_combo.setCurrentText(
+            "Windows" if self.state.target_os == "windows" else "Linux"
         )
+        self.os_combo.blockSignals(False)
 
-        playbook = os.path.join(
-            ansible_dir,
-            "playbooks/master_deploy_v2.yml"
-        )
+        # Reset the cached form for the current key so stale input is cleared
+        key = self._current_key()
+        if key in self._form_cache:
+            self._form_cache[key].reset()
 
-        cmd = [
-            "ansible-playbook",
-            "-i", hosts_path,
-            playbook,
-            "-e", json.dumps(ext_vars)
-        ]
+        self._swap_form()
 
-        # --------- Create Worker ---------
-        worker = AnsibleWorker(cmd)
-        self.workers.append(worker)
+        print("[SoftwarePage] Opened for targets:", self.state.selected_targets)
 
-        #  Send logs to console
-        worker.output_received.connect(
-            lambda msg: self.console.append(msg)
-        )
 
-        # Send logs to Operation Status Page (if linked)
-        if self.status_page:
-            worker.output_received.connect(
-                self.status_page.handle_log_output
-            )
+# ─────────────────────────────────────────────────────────────────────────────
+#  Fallback widget (should never appear in normal use)
+# ─────────────────────────────────────────────────────────────────────────────
 
-        # --------- Cleanup After Finish ---------
-        def _cleanup(ok, w=worker, hosts=hosts_path):
-            if ok:
-                self.console.append("\n[DONE] Deployment completed successfully.")
-            else:
-                self.console.append("\n[DONE] Deployment failed.")
+class _NoFormPlaceholder(QWidget):
+    payload_ready = Signal(dict)   # never emitted – keeps duck-typing happy
 
-            # Restore buttons
-            self.final_btn.setEnabled(True)
-            self.status_btn.setEnabled(True)
+    def __init__(self, os_name: str, action: str):
+        super().__init__()
+        lbl = QLabel(f'No form available for "{os_name} / {action}".')
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setStyleSheet("color: #888;")
+        QVBoxLayout(self).addWidget(lbl)
 
-            # Remove temp inventory
-            if os.path.exists(hosts):
-                os.remove(hosts)
-
-            if w in self.workers:
-                self.workers.remove(w)
-
-            w.deleteLater()
-
-        worker.finished.connect(_cleanup)
-
-        # 🚀 Start Deployment
-        worker.start()
+    def reset(self):
+        pass
