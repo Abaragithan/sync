@@ -1,0 +1,141 @@
+# app_profiles.yml
+# Software-specific installation and uninstallation profiles
+# Place this file in: ansible/group_vars/windows_clients/app_profiles.yml
+
+---
+app_profiles:
+  # ===== DEVELOPMENT TOOLS =====
+  vscode:
+    install_args: "/VERYSILENT /SUPPRESSMSGBOXES /MERGETASKS=!runcode"
+    uninstall_pattern: "Microsoft Visual Studio Code"
+    description: "Visual Studio Code"
+  
+  notepadplusplus:
+    install_args: "/S"
+    uninstall_pattern: "Notepad++"
+    description: "Notepad++ text editor"
+  
+  git:
+    install_args: "/VERYSILENT /NORESTART /COMPONENTS='icons,ext\\reg\\shellhere,assoc,assoc_sh'"
+    uninstall_pattern: "Git"
+    description: "Git for Windows"
+  
+  python:
+    install_args: "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+    uninstall_pattern: "Python"
+    description: "Python programming language"
+  
+  nodejs:
+    install_args: "/qn /norestart"
+    uninstall_pattern: "Node.js"
+    description: "Node.js JavaScript runtime"
+  
+  jdk:
+    install_args: "/s ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome"
+    uninstall_pattern: "Java"
+    description: "Java Development Kit"
+  
+  # ===== ENGINEERING SOFTWARE =====
+  matlab:
+    install_args: "-mode silent -agreeToLicense yes"
+    uninstall_pattern: "MATLAB"
+    description: "MATLAB (requires installer_input.txt for silent install)"
+    notes: |
+      For MATLAB, you need to create an installer_input.txt file with:
+      destinationFolder=C:\\Program Files\\MATLAB\\R2023b
+      fileInstallationKey=YOUR-FIK-HERE
+      agreeToLicense=yes
+      mode=silent
+  
+  autocad:
+    install_args: "/qn /norestart"
+    uninstall_pattern: "AutoCAD"
+    description: "AutoCAD (MSI-based deployment)"
+    notes: "Requires pre-configured deployment package from Autodesk"
+  
+  solidworks:
+    install_args: "/S /W"
+    uninstall_pattern: "SolidWorks"
+    description: "SolidWorks CAD software"
+    notes: "Requires admin image and license server setup"
+  
+  # ===== PRODUCTIVITY TOOLS =====
+  vlc:
+    install_args: "/S"
+    uninstall_pattern: "VLC media player"
+    description: "VLC Media Player"
+  
+  7zip:
+    install_args: "/S"
+    uninstall_pattern: "7-Zip"
+    description: "7-Zip file archiver"
+  
+  adobereader:
+    install_args: "/sAll /rs /msi EULA_ACCEPT=YES"
+    uninstall_pattern: "Adobe Acrobat Reader"
+    description: "Adobe Acrobat Reader DC"
+  
+  chrome:
+    install_args: "/silent /install"
+    uninstall_pattern: "Google Chrome"
+    description: "Google Chrome browser"
+  
+  firefox:
+    install_args: "/S"
+    uninstall_pattern: "Mozilla Firefox"
+    description: "Mozilla Firefox browser"
+  
+  # ===== SCIENTIFIC/STATISTICAL =====
+  rstudio:
+    install_args: "/S"
+    uninstall_pattern: "RStudio"
+    description: "RStudio IDE"
+  
+  anaconda:
+    install_args: "/InstallationType=AllUsers /RegisterPython=1 /S /D=C:\\ProgramData\\Anaconda3"
+    uninstall_pattern: "Anaconda3"
+    description: "Anaconda Python Distribution"
+  
+  # ===== DATABASE TOOLS =====
+  mysql:
+    install_args: "/qn /norestart"
+    uninstall_pattern: "MySQL Server"
+    description: "MySQL Server"
+  
+  postgresql:
+    install_args: "--mode unattended --superpassword PASSWORD_HERE"
+    uninstall_pattern: "PostgreSQL"
+    description: "PostgreSQL Database"
+  
+  # ===== UTILITIES =====
+  putty:
+    install_args: "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+    uninstall_pattern: "PuTTY"
+    description: "PuTTY SSH client"
+  
+  wireshark:
+    install_args: "/S /desktopicon=no /quicklaunchicon=no"
+    uninstall_pattern: "Wireshark"
+    description: "Wireshark network analyzer"
+  
+  winrar:
+    install_args: "/S"
+    uninstall_pattern: "WinRAR"
+    description: "WinRAR archiver"
+
+# ===== HOW TO ADD NEW SOFTWARE =====
+# 1. Find the installer's silent switches:
+#    - NSIS: /S
+#    - InnoSetup: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+#    - MSI: /qn /norestart
+#    - Run: installer.exe /? or installer.exe --help
+#
+# 2. Find the uninstall registry name:
+#    - Open Registry Editor (regedit)
+#    - Navigate to: HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall
+#    - Also check: HKLM\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall
+#    - Look for the DisplayName value
+#
+# 3. Add entry to this file following the pattern above
+#
+# 4. Test with: ansible-playbook -e "app_name=yourapp file_name=installer.exe app_state=present"

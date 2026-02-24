@@ -1,7 +1,29 @@
 ---
-- name: Dynamic Multi-OS Management
-  hosts: all   #"{{ target_host }}"
+- name: Dynamic Multi-OS Management with Enhanced Software Support
+  hosts: all
   gather_facts: yes
+
+  vars:
+    # Custom install/uninstall arguments for specific software
+    app_profiles:
+      matlab:
+        install_args: "-mode silent -agreeToLicense yes"
+        uninstall_pattern: "MATLAB"
+      vscode:
+        install_args: "/VERYSILENT /SUPPRESSMSGBOXES /MERGETASKS=!runcode"
+        uninstall_pattern: "Microsoft Visual Studio Code"
+      notepadplusplus:
+        install_args: "/S"
+        uninstall_pattern: "Notepad++"
+      python:
+        install_args: "/quiet InstallAllUsers=1 PrependPath=1"
+        uninstall_pattern: "Python"
+      git:
+        install_args: "/VERYSILENT /NORESTART"
+        uninstall_pattern: "Git"
+      nodejs:
+        install_args: "/qn /norestart"
+        uninstall_pattern: "Node.js"
 
   tasks:
     # =========================
@@ -20,12 +42,29 @@
             dest: "C:\\Temp\\{{ file_name }}"
           when: app_state == "present"
 
-        - name: Install Windows application
+        - name: Detect installer type
+          ansible.builtin.set_fact:
+            installer_ext: "{{ file_name | regex_search('\\.(exe|msi|appx|msix)$') }}"
+          when: app_state == "present"
+
+        - name: Get custom install args if defined
+          ansible.builtin.set_fact:
+            custom_install_args: "{{ app_profiles[app_name].install_args | default('') }}"
+          when: app_state == "present" and app_name is defined
+
+        - name: Install Windows application (EXE)
           ansible.windows.win_package:
             path: "C:\\Temp\\{{ file_name }}"
             state: present
-            arguments: /S
-          when: app_state == "present"
+            arguments: "{{ custom_install_args | default('/S') }}"
+          when: app_state == "present" and installer_ext == ".exe"
+
+        - name: Install Windows application (MSI)
+          ansible.windows.win_package:
+            path: "C:\\Temp\\{{ file_name }}"
+            state: present
+            arguments: "{{ custom_install_args | default('/qn /norestart') }}"
+          when: app_state == "present" and installer_ext == ".msi"
 
         # ---------- UNINSTALL (ABSENT) ----------
         - name: Set app_name automatically if not provided
@@ -35,13 +74,15 @@
                 (
                   {
                     '7zx64.exe': '7-Zip',
-                    'vlc-3.0.23-win32.exe': 'VLC media player'
+                    'vlc-3.0.23-win32.exe': 'VLC media player',
+                    'VSCodeSetup.exe': 'Microsoft Visual Studio Code',
+                    'npp.installer.exe': 'Notepad++'
                   }.get(file_name, (file_name | regex_replace('\.exe$', '')))
                 )
               }}
           when: app_state == "absent" and (app_name is not defined or app_name | length == 0)
 
-        - name: Find matching app in registry (returns single JSON object or empty)
+        - name: Find matching app in registry
           ansible.windows.win_powershell:
             script: |
               $name = "{{ app_name }}"
@@ -55,14 +96,19 @@
                 Select-Object -First 1 DisplayName, UninstallString, QuietUninstallString
 
               if ($null -eq $app) {
-                ""   # empty output if not found
+                ""
               } else {
-                $app | ConvertTo-Json -Depth 3
+                $output = @{
+                  DisplayName = $app.DisplayName
+                  UninstallString = if ($app.UninstallString) { $app.UninstallString } else { "" }
+                  QuietUninstallString = if ($app.QuietUninstallString) { $app.QuietUninstallString } else { "" }
+                }
+                $output | ConvertTo-Json -Depth 3
               }
           register: app_match_json
           when: app_state == "absent"
 
-        - name: Set app_match fact (safe parsing)
+        - name: Set app_match fact
           ansible.builtin.set_fact:
             app_match: "{{ (app_match_json.output | default([]) | join('')) | from_json }}"
           when: app_state == "absent" and (app_match_json.output | default([]) | join('') | length > 0)
@@ -81,22 +127,64 @@
             msg: "Application not found. app_name='{{ app_name }}'. Try passing exact DisplayName with -e app_name='...'"
           when: app_state == "absent" and (app_match is not defined)
 
-        - name: Run uninstall command (safe, no Invoke-Expression)
-          ansible.windows.win_shell: |
-            $cmd = @"
-            {{ app_match.QuietUninstallString | default(app_match.UninstallString) }}
-            "@.Trim()
-
-            if (-not $cmd) { Write-Output "No uninstall command found"; exit 1 }
-
-            Write-Output "Running: $cmd"
-            cmd.exe /c $cmd
+        - name: Run uninstall command
+          ansible.windows.win_powershell:
+            script: |
+              $ErrorActionPreference = "Stop"
+              
+              $quiet = "{{ app_match.QuietUninstallString | default('') }}"
+              $normal = "{{ app_match.UninstallString | default('') }}"
+              
+              # Remove surrounding quotes
+              $quiet = $quiet.Trim().Trim('"')
+              $normal = $normal.Trim().Trim('"')
+              
+              # Pick the command
+              $cmd = if ($quiet) { $quiet } else { $normal }
+              
+              if (-not $cmd) {
+                throw "No uninstall command found"
+              }
+              
+              # Detect installer type and add silent flags
+              $silentFlags = ""
+              if ($cmd -match 'uninstall\.exe' -and $cmd -notmatch '/S') {
+                $silentFlags = " /S"
+              } elseif ($cmd -match 'uninst\.exe' -and $cmd -notmatch '/VERYSILENT') {
+                $silentFlags = " /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+              } elseif ($cmd -match 'msiexec' -and $cmd -notmatch '/qn') {
+                if ($cmd -notmatch '/quiet') { $silentFlags = " /quiet /norestart" }
+              }
+              
+              $fullCmd = $cmd + $silentFlags
+              Write-Output "Running: $fullCmd"
+              
+              # Execute and wait
+              if ($fullCmd -match '^msiexec') {
+                $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $fullCmd" -Wait -PassThru -NoNewWindow
+              } else {
+                $process = Start-Process -FilePath $cmd -ArgumentList $silentFlags.Trim() -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+                if (-not $process) {
+                  # Fallback if direct execution fails
+                  $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$fullCmd`"" -Wait -PassThru -NoNewWindow
+                }
+              }
+              
+              $exitCode = $process.ExitCode
+              Write-Output "Uninstaller exit code: $exitCode"
+              
+              # Many uninstallers return 0 for success, 3010 for success with reboot required
+              if ($exitCode -eq 0 -or $exitCode -eq 3010) {
+                exit 0
+              } else {
+                exit $exitCode
+              }
           register: uninstall_result
           when: app_state == "absent" and (app_match is defined)
 
         - name: Uninstall output
           debug:
-            var: uninstall_result.stdout_lines
+            var: uninstall_result.output
           when: app_state == "absent" and uninstall_result is defined
 
       when: ansible_facts["os_family"] == "Windows"
