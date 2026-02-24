@@ -6,20 +6,59 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QGraphicsOpacityEffect, QMessageBox,
     QSizePolicy, QSpacerItem
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter
-
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint
+from PySide6.QtGui import QColor, QFont, QPainter, QMouseEvent, QEnterEvent, QPen
 
 _IPV4_REGEX = re.compile(
     r"^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
     r"(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$"
 )
 
+class CloseButton(QPushButton):
+    """Custom close button with red hover effect"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.NoFocus)
+        self._hovered = False
+        
+    def enterEvent(self, event: QEnterEvent):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Background circle
+        if self._hovered:
+            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
+        else:
+            painter.setBrush(Qt.transparent)
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(4, 4, 24, 24)
+        
+        # X mark
+        if self._hovered:
+            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
+        else:
+            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
+        margin = 11
+        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
+        painter.drawLine(32 - margin, margin, margin, 32 - margin)
+
 
 class BulkIpDialog(QDialog):
     """
-    Same DESIGN as EditPcIpDialog
-    Functionality: keep it simple -> Apply => accept()
+    Same DESIGN as EditPcIpDialog - Light Mode Only
+    Functionality: keep it simple => Apply => accept()
     """
     def __init__(self, parent=None, default_start_ip: str = ""):
         super().__init__(parent)
@@ -30,6 +69,9 @@ class BulkIpDialog(QDialog):
         # Frameless + translucent bg
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        
+        # For window dragging
+        self._drag_position: QPoint | None = None
 
         # Same size family (you can tweak width)
         self.setFixedSize(540, 300)
@@ -38,6 +80,21 @@ class BulkIpDialog(QDialog):
 
         self._build_ui()
         QTimer.singleShot(0, self._animate_in)
+
+    # ---------------- Window Dragging ----------------
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self._drag_position is not None:
+            delta = event.globalPosition().toPoint() - self._drag_position
+            self.move(self.pos() + delta)
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = None
 
     # ---------------- UI ----------------
     def _build_ui(self):
@@ -49,11 +106,95 @@ class BulkIpDialog(QDialog):
         self.card.setObjectName("BulkIpCard")
         self.card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # Apply light mode styles directly
+        self.setStyleSheet("""
+            QFrame#BulkIpCard {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 20px;
+            }
+            QLabel#BulkIpIcon { 
+                background: transparent; 
+                color: #2563eb;
+            }
+            QLabel#BulkIpTitle {
+                color: #0f172a;
+                font-size: 16px;
+                font-weight: 800;
+                background: transparent;
+            }
+            QLabel#BulkIpHint {
+                color: #475569;
+                font-size: 13px;
+                background: transparent;
+            }
+            QLabel#BulkIpLabel {
+                color: #64748b;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                background: transparent;
+                min-width: 120px;
+                max-width: 120px;
+                padding-right: 8px;
+            }
+            QLineEdit#BulkIpInput {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 8px 12px;
+                color: #0f172a;
+                font-size: 14px;
+                font-family: 'Consolas', monospace;
+            }
+            QLineEdit#BulkIpInput:focus { 
+                border: 1px solid #2563eb;
+                background: #ffffff;
+            }
+            QLineEdit#BulkIpInput:hover {
+                border: 1px solid #94a3b8;
+            }
+
+            QPushButton#BulkIpCancelBtn {
+                background: white;
+                border: 1px solid #e2e8f0;
+                color: #64748b;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+            QPushButton#BulkIpCancelBtn:hover {
+                background: #f8fafc;
+                border: 1px solid #2563eb;
+                color: #0f172a;
+            }
+            QPushButton#BulkIpCancelBtn:pressed {
+                background: #f1f5f9;
+            }
+            QPushButton#BulkIpApplyBtn {
+                background: #2563eb;
+                border: none;
+                color: white;
+                border-radius: 10px;
+                font-weight: 700;
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+            QPushButton#BulkIpApplyBtn:hover { 
+                background: #1d4ed8; 
+            }
+            QPushButton#BulkIpApplyBtn:pressed { 
+                background: #1e40af; 
+            }
+        """)
+
         card_lay = QVBoxLayout(self.card)
         card_lay.setContentsMargins(32, 24, 32, 24)
         card_lay.setSpacing(18)
 
-        # Header
+        # Header with close button
         header = QHBoxLayout()
         header.setSpacing(12)
 
@@ -70,6 +211,12 @@ class BulkIpDialog(QDialog):
         header.addWidget(icon)
         header.addWidget(title)
         header.addStretch()
+        
+        # Close button
+        self.close_btn = CloseButton()
+        self.close_btn.clicked.connect(self.reject)
+        header.addWidget(self.close_btn)
+        
         card_lay.addLayout(header)
 
         # Description
@@ -132,147 +279,6 @@ class BulkIpDialog(QDialog):
 
         root.addWidget(self.card)
 
-        # Apply styles based on theme (same approach)
-        self._apply_styles()
-
-    # ---------------- Style ----------------
-    def _apply_styles(self):
-        theme = "dark"
-        if hasattr(self.parent(), "state") and hasattr(self.parent().state, "theme"):
-            theme = self.parent().state.theme
-
-        if theme == "light":
-            self.setStyleSheet("""
-                QFrame#BulkIpCard {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 20px;
-                }
-                QLabel#BulkIpIcon { background: transparent; }
-                QLabel#BulkIpTitle {
-                    color: #0f172a;
-                    font-size: 16px;
-                    font-weight: 800;
-                    background: transparent;
-                }
-                QLabel#BulkIpHint {
-                    color: #475569;
-                    font-size: 13px;
-                    background: transparent;
-                }
-                QLabel#BulkIpLabel {
-                    color: #64748b;
-                    font-size: 12px;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLineEdit#BulkIpInput {
-                    background: #f8fafc;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 10px;
-                    padding: 8px 12px;
-                    color: #0f172a;
-                    font-size: 14px;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#BulkIpInput:focus { border: 1px solid #2563eb; }
-
-                QPushButton#BulkIpCancelBtn {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    color: #64748b;
-                    border-radius: 10px;
-                    font-weight: 600;
-                    font-size: 13px;
-                }
-                QPushButton#BulkIpCancelBtn:hover {
-                    background: #f8fafc;
-                    border: 1px solid #2563eb;
-                    color: #0f172a;
-                }
-                QPushButton#BulkIpApplyBtn {
-                    background: #2563eb;
-                    border: none;
-                    color: white;
-                    border-radius: 10px;
-                    font-weight: 700;
-                    font-size: 13px;
-                }
-                QPushButton#BulkIpApplyBtn:hover { background: #1d4ed8; }
-            """)
-        else:
-            # ✅ Dark theme: keep it BLACK (not blue)
-            self.setStyleSheet("""
-                QFrame#BulkIpCard {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                                              stop:0 #1b1b1b,
-                                              stop:1 #0f0f0f);
-                    border: 1px solid #2a2a2a;
-                    border-radius: 20px;
-                }
-                QLabel#BulkIpIcon { background: transparent; }
-                QLabel#BulkIpTitle {
-                    color: #ffffff;
-                    font-size: 16px;
-                    font-weight: 800;
-                    background: transparent;
-                }
-                QLabel#BulkIpHint {
-                    color: rgba(226,232,240,170);
-                    font-size: 13px;
-                    background: transparent;
-                }
-                QLabel#BulkIpLabel {
-                    color: #94a3b8;
-                    font-size: 12px;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLineEdit#BulkIpInput {
-                    background: #171717;
-                    border: 1px solid #2f2f2f;
-                    border-radius: 10px;
-                    padding: 8px 12px;
-                    color: #ffffff;
-                    font-size: 14px;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#BulkIpInput:focus { border: 1px solid #60a5fa; }
-
-                QPushButton#BulkIpCancelBtn {
-                    background: #171717;
-                    border: 1px solid #2f2f2f;
-                    color: rgba(226,232,240,190);
-                    border-radius: 10px;
-                    font-weight: 600;
-                    font-size: 13px;
-                }
-                QPushButton#BulkIpCancelBtn:hover {
-                    background: #202020;
-                    border: 1px solid #60a5fa;
-                    color: white;
-                }
-                QPushButton#BulkIpApplyBtn {
-                    background: #2563eb;
-                    border: none;
-                    color: white;
-                    border-radius: 10px;
-                    font-weight: 700;
-                    font-size: 13px;
-                }
-                QPushButton#BulkIpApplyBtn:hover { background: #1d4ed8; }
-            """)
-
     # ---------------- Animation + overlay ----------------
     def _animate_in(self):
         self._center_on_parent()
@@ -301,7 +307,6 @@ class BulkIpDialog(QDialog):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 90))
         painter.end()
         super().paintEvent(event)
 

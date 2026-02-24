@@ -13,7 +13,7 @@ from PySide6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush, QFont
 
 class RibbonMessageBox(QDialog):
     """
-    Glass message dialog:
+    Glass message dialog - Light Mode Only:
     - Information: ribbons + confetti (celebration)
     - Warning / Question: NO confetti (only glass + entrance animation)
     - Critical: glitch + shake
@@ -26,7 +26,6 @@ class RibbonMessageBox(QDialog):
         text: str,
         icon: QMessageBox.Icon = QMessageBox.Information,
         buttons: QMessageBox.StandardButtons = QMessageBox.Ok,
-        theme: str = "dark",
     ):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
@@ -36,7 +35,6 @@ class RibbonMessageBox(QDialog):
         # Window size
         self.resize(520, 240)
 
-        self._theme = (theme or "dark").lower()
         self._icon_type = icon
         self._clicked = QMessageBox.NoButton
 
@@ -292,7 +290,7 @@ class RibbonMessageBox(QDialog):
             painter.save()
             painter.translate(self._glitch_offset, 0)
 
-        # Glass card paint
+        # Glass card paint - Light mode only
         card_rect = self.card.geometry()
         self._paint_glass_card(painter, card_rect)
 
@@ -303,31 +301,26 @@ class RibbonMessageBox(QDialog):
         super().paintEvent(event)
 
     def _paint_glass_card(self, painter: QPainter, card_rect: QRect):
-        is_light = (self._theme == "light")
+        # Light mode glass card
         grad = QLinearGradient(card_rect.topLeft(), card_rect.bottomRight())
-
-        if is_light:
-            grad.setColorAt(0, QColor(255, 255, 255, 195))
-            grad.setColorAt(1, QColor(240, 245, 255, 210))
-            border_color = QColor(60, 120, 255, 80)
-            glow_color = QColor(100, 150, 255, 30)
-            top_highlight = QColor(255, 255, 255, 120)
-        else:
-            grad.setColorAt(0, QColor(25, 28, 40, 175))
-            grad.setColorAt(1, QColor(16, 18, 28, 200))
-            border_color = QColor(110, 170, 255, 90)
-            glow_color = QColor(80, 140, 255, 28)
-            top_highlight = QColor(255, 255, 255, 35)
+        grad.setColorAt(0, QColor(255, 255, 255, 245))
+        grad.setColorAt(1, QColor(240, 248, 255, 250))
+        
+        border_color = QColor(37, 99, 235, 60)  # Blue with low opacity
+        glow_color = QColor(37, 99, 235, 15)   # Very subtle blue glow
+        top_highlight = QColor(255, 255, 255, 180)
 
         painter.setBrush(QBrush(grad))
         painter.setPen(QPen(border_color, 2))
         painter.drawRoundedRect(card_rect, 22, 22)
 
+        # Inner glow
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(glow_color))
         painter.drawRoundedRect(card_rect.adjusted(5, 5, -5, -5), 16, 16)
 
-        painter.setPen(QPen(top_highlight, 1))
+        # Top highlight line
+        painter.setPen(QPen(top_highlight, 1.5))
         painter.drawLine(
             card_rect.left() + 18, card_rect.top() + 6,
             card_rect.right() - 18, card_rect.top() + 6
@@ -341,10 +334,10 @@ class RibbonMessageBox(QDialog):
         painter.translate(center_x, center_y)
 
         ribbon_colors = [
-            QColor(255, 215, 0, 170),
-            QColor(255, 100, 100, 170),
-            QColor(100, 200, 255, 170),
-            QColor(255, 150, 255, 170),
+            QColor(59, 130, 246, 160),   # Blue
+            QColor(239, 68, 68, 160),    # Red
+            QColor(34, 197, 94, 160),    # Green
+            QColor(168, 85, 247, 160),   # Purple
         ]
 
         for i, color in enumerate(ribbon_colors):
@@ -386,40 +379,32 @@ class RibbonMessageBox(QDialog):
     # Styles / positioning
     # ------------------------------
     def _apply_styles(self):
-        if self._theme == "light":
-            self.setStyleSheet("""
-                QLabel { background: transparent; color: rgba(15, 23, 42, 235); }
-                QPushButton {
-                    background: rgba(255, 255, 255, 210);
-                    border: 1px solid rgba(70, 130, 255, 70);
-                    border-radius: 12px;
-                    padding: 8px 18px;
-                    font-weight: 800;
-                    color: rgba(15, 23, 42, 235);
-                }
-                QPushButton:hover {
-                    background: rgba(255, 255, 255, 235);
-                    border: 1px solid rgba(70, 130, 255, 130);
-                }
-                QPushButton:pressed { background: rgba(240, 240, 255, 240); }
-            """)
-        else:
-            self.setStyleSheet("""
-                QLabel { background: transparent; color: rgba(226, 232, 240, 235); }
-                QPushButton {
-                    background: rgba(40, 40, 50, 180);
-                    border: 1px solid rgba(100, 150, 255, 80);
-                    border-radius: 12px;
-                    padding: 8px 18px;
-                    font-weight: 800;
-                    color: rgba(226, 232, 240, 235);
-                }
-                QPushButton:hover {
-                    background: rgba(60, 60, 80, 200);
-                    border: 1px solid rgba(120, 180, 255, 150);
-                }
-                QPushButton:pressed { background: rgba(80, 80, 120, 220); }
-            """)
+        # Light mode only styles
+        self.setStyleSheet("""
+            QLabel { 
+                background: transparent; 
+                color: #0f172a;
+            }
+            QLabel#RibbonCard {
+                background: transparent;
+            }
+            QPushButton {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 8px 18px;
+                font-weight: 700;
+                color: #0f172a;
+            }
+            QPushButton:hover {
+                background: #f8fafc;
+                border: 1px solid #2563eb;
+                color: #0f172a;
+            }
+            QPushButton:pressed {
+                background: #f1f5f9;
+            }
+        """)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -486,21 +471,15 @@ class RibbonMessageBox(QDialog):
 
 def show_glass_message(parent, title, text, icon=QMessageBox.Information, buttons=QMessageBox.Ok):
     """
-    Helper wrapper.
-    - Reads theme from parent.state.theme if available
-    - Returns clicked QMessageBox.StandardButton
+    Helper wrapper - Light mode only.
+    Returns clicked QMessageBox.StandardButton
     """
-    theme = "dark"
-    if hasattr(parent, "state") and getattr(parent.state, "theme", None):
-        theme = parent.state.theme
-
     dlg = RibbonMessageBox(
         parent=parent,
         title=title,
         text=text,
         icon=icon,
         buttons=buttons,
-        theme=theme,
     )
     dlg.exec()
     return dlg.clicked_button()

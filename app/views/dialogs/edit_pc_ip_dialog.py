@@ -6,14 +6,55 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QGraphicsOpacityEffect, QMessageBox,
     QSizePolicy, QSpacerItem
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint
+from PySide6.QtGui import QColor, QFont, QPainter, QMouseEvent, QEnterEvent, QPen
 
 
 _IPV4_REGEX = re.compile(
     r"^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
     r"(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$"
 )
+
+
+class CloseButton(QPushButton):
+    """Custom close button with red hover effect"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.NoFocus)
+        self._hovered = False
+        
+    def enterEvent(self, event: QEnterEvent):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Background circle
+        if self._hovered:
+            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
+        else:
+            painter.setBrush(Qt.transparent)
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(4, 4, 24, 24)
+        
+        # X mark
+        if self._hovered:
+            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
+        else:
+            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
+        margin = 11
+        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
+        painter.drawLine(32 - margin, margin, margin, 32 - margin)
 
 
 class EditPcIpDialog(QDialog):
@@ -30,6 +71,9 @@ class EditPcIpDialog(QDialog):
         # Frameless + translucent bg (for overlay)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        
+        # For window dragging
+        self._drag_position: QPoint | None = None
 
         # Size for proper alignment
         self.setFixedSize(540, 320)
@@ -37,6 +81,47 @@ class EditPcIpDialog(QDialog):
         self._build_ui()
         QTimer.singleShot(0, self._animate_in)
 
+    # ---------------- Window Dragging ----------------
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self._drag_position is not None:
+            delta = event.globalPosition().toPoint() - self._drag_position
+            self.move(self.pos() + delta)
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = None
+
+    # ---------------- Animation ----------------
+    def _animate_in(self):
+        self._center_on_parent()
+
+        fx = QGraphicsOpacityEffect(self.card)
+        self.card.setGraphicsEffect(fx)
+        fx.setOpacity(0.0)
+
+        anim = QPropertyAnimation(fx, b"opacity", self)
+        anim.setDuration(220)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.start()
+        self._anim = anim
+
+    def _center_on_parent(self):
+        if not self.parent():
+            return
+        pg = self.parent().geometry()
+        self.move(
+            pg.center().x() - self.width() // 2,
+            pg.center().y() - self.height() // 2
+        )
+
+    # ---------------- UI ----------------
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -46,11 +131,117 @@ class EditPcIpDialog(QDialog):
         self.card.setObjectName("EditPcIpCard")
         self.card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # Apply light mode styles directly
+        self.setStyleSheet("""
+            QFrame#EditPcIpCard {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 20px;
+            }
+            QLabel#EditPcIpIcon {
+                color: #2563eb;
+                background: transparent;
+            }
+            QLabel#EditPcIpTitle {
+                color: #0f172a;
+                font-size: 16px;
+                font-weight: 800;
+                background: transparent;
+            }
+            QLabel#EditPcIpLabel {
+                color: #64748b;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                background: transparent;
+                min-width: 120px;
+                max-width: 120px;
+                padding-right: 8px;
+            }
+            QLabel#EditPcIpCurrentLabel {
+                color: #64748b;
+                font-size: 13px;
+                font-weight: 500;
+                background: transparent;
+                min-width: 120px;
+                max-width: 120px;
+                padding-right: 8px;
+            }
+            QLabel#EditPcIpPcName {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                color: #0f172a;
+                font-size: 15px;
+                font-weight: 600;
+                padding: 0px 12px;
+            }
+            QLabel#EditPcIpCurrentValue {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                color: #2563eb;
+                font-size: 14px;
+                font-weight: 600;
+                font-family: 'Consolas', monospace;
+                padding: 0px 12px;
+            }
+            QLineEdit#EditPcIpInput {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 8px 12px;
+                color: #0f172a;
+                font-size: 14px;
+                font-family: 'Consolas', monospace;
+            }
+            QLineEdit#EditPcIpInput:focus {
+                border: 1px solid #2563eb;
+                background: #ffffff;
+            }
+            QLineEdit#EditPcIpInput:hover {
+                border: 1px solid #94a3b8;
+            }
+            QPushButton#EditPcIpCancelBtn {
+                background: white;
+                border: 1px solid #e2e8f0;
+                color: #64748b;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+            QPushButton#EditPcIpCancelBtn:hover {
+                background: #f8fafc;
+                border: 1px solid #2563eb;
+                color: #0f172a;
+            }
+            QPushButton#EditPcIpCancelBtn:pressed {
+                background: #f1f5f9;
+            }
+            QPushButton#EditPcIpSaveBtn {
+                background: #2563eb;
+                border: none;
+                color: white;
+                border-radius: 10px;
+                font-weight: 700;
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+            QPushButton#EditPcIpSaveBtn:hover {
+                background: #1d4ed8;
+            }
+            QPushButton#EditPcIpSaveBtn:pressed {
+                background: #1e40af;
+            }
+        """)
+
         card_lay = QVBoxLayout(self.card)
         card_lay.setContentsMargins(32, 24, 32, 24)
         card_lay.setSpacing(18)
 
-        # Header
+        # Header with close button
         header = QHBoxLayout()
         header.setSpacing(12)
 
@@ -67,6 +258,12 @@ class EditPcIpDialog(QDialog):
         header.addWidget(icon)
         header.addWidget(title)
         header.addStretch()
+        
+        # Close button
+        self.close_btn = CloseButton()
+        self.close_btn.clicked.connect(self.reject)
+        header.addWidget(self.close_btn)
+        
         card_lay.addLayout(header)
 
         # PC NAME row - side by side
@@ -166,231 +363,9 @@ class EditPcIpDialog(QDialog):
         # Add card to root
         root.addWidget(self.card)
 
-        # Apply styles based on theme
-        self._apply_styles()
-
-    def _apply_styles(self):
-        """Apply theme-aware styles - fixed for both dark and light mode"""
-        # Check parent theme
-        theme = "dark"
-        if hasattr(self.parent(), "state") and hasattr(self.parent().state, "theme"):
-            theme = self.parent().state.theme
-        
-        if theme == "light":
-            # Light mode styles
-            self.setStyleSheet("""
-                QFrame#EditPcIpCard {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 20px;
-                }
-                QLabel#EditPcIpIcon {
-                    color: #2563eb;
-                    background: transparent;
-                }
-                QLabel#EditPcIpTitle {
-                    color: #0f172a;
-                    font-size: 16px;
-                    font-weight: 800;
-                    background: transparent;
-                }
-                QLabel#EditPcIpLabel {
-                    color: #64748b;
-                    font-size: 12px;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLabel#EditPcIpCurrentLabel {
-                    color: #64748b;
-                    font-size: 13px;
-                    font-weight: 500;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLabel#EditPcIpPcName {
-                    background: #f8fafc;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 10px;
-                    color: #0f172a;
-                    font-size: 15px;
-                    font-weight: 600;
-                }
-                QLabel#EditPcIpCurrentValue {
-                    background: #f8fafc;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 10px;
-                    color: #2563eb;
-                    font-size: 14px;
-                    font-weight: 600;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#EditPcIpInput {
-                    background: #f8fafc;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 10px;
-                    padding: 8px 12px;
-                    color: #0f172a;
-                    font-size: 14px;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#EditPcIpInput:focus {
-                    border: 1px solid #2563eb;
-                }
-                QPushButton#EditPcIpCancelBtn {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    color: #64748b;
-                    border-radius: 10px;
-                    font-weight: 600;
-                    font-size: 13px;
-                }
-                QPushButton#EditPcIpCancelBtn:hover {
-                    background: #f8fafc;
-                    border: 1px solid #2563eb;
-                    color: #0f172a;
-                }
-                QPushButton#EditPcIpSaveBtn {
-                    background: #2563eb;
-                    border: none;
-                    color: white;
-                    border-radius: 10px;
-                    font-weight: 700;
-                    font-size: 13px;
-                }
-                QPushButton#EditPcIpSaveBtn:hover {
-                    background: #1d4ed8;
-                }
-            """)
-        else:
-            # Dark mode styles
-            self.setStyleSheet("""
-                QFrame#EditPcIpCard {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                                              stop:0 #1e1e1e,
-                                              stop:1 #121212);
-                    border: 1px solid #2a2a2a;
-                    border-radius: 20px;
-                }
-                QLabel#EditPcIpIcon {
-                    color: #60a5fa;
-                    background: transparent;
-                }
-                QLabel#EditPcIpTitle {
-                    color: #ffffff;
-                    font-size: 16px;
-                    font-weight: 800;
-                    background: transparent;
-                }
-                QLabel#EditPcIpLabel {
-                    color: #94a3b8;
-                    font-size: 12px;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLabel#EditPcIpCurrentLabel {
-                    color: #94a3b8;
-                    font-size: 13px;
-                    font-weight: 500;
-                    background: transparent;
-                    min-width: 120px;
-                    max-width: 120px;
-                    padding-right: 8px;
-                }
-                QLabel#EditPcIpPcName {
-                    background: #2a2a2a;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 10px;
-                    color: #ffffff;
-                    font-size: 15px;
-                    font-weight: 600;
-                }
-                QLabel#EditPcIpCurrentValue {
-                    background: #2a2a2a;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 10px;
-                    color: #60a5fa;
-                    font-size: 14px;
-                    font-weight: 600;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#EditPcIpInput {
-                    background: #2a2a2a;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 10px;
-                    padding: 8px 12px;
-                    color: #ffffff;
-                    font-size: 14px;
-                    font-family: 'Consolas', monospace;
-                }
-                QLineEdit#EditPcIpInput:focus {
-                    border: 1px solid #60a5fa;
-                }
-                QPushButton#EditPcIpCancelBtn {
-                    background: #2a2a2a;
-                    border: 1px solid #3a3a3a;
-                    color: #cccccc;
-                    border-radius: 10px;
-                    font-weight: 600;
-                    font-size: 13px;
-                }
-                QPushButton#EditPcIpCancelBtn:hover {
-                    background: #333333;
-                    border: 1px solid #60a5fa;
-                    color: white;
-                }
-                QPushButton#EditPcIpSaveBtn {
-                    background: #2563eb;
-                    border: none;
-                    color: white;
-                    border-radius: 10px;
-                    font-weight: 700;
-                    font-size: 13px;
-                }
-                QPushButton#EditPcIpSaveBtn:hover {
-                    background: #1d4ed8;
-                }
-            """)
-
-    def _animate_in(self):
-        self._center_on_parent()
-
-        fx = QGraphicsOpacityEffect(self.card)
-        self.card.setGraphicsEffect(fx)
-        fx.setOpacity(0.0)
-
-        anim = QPropertyAnimation(fx, b"opacity", self)
-        anim.setDuration(220)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
-        anim.start()
-        self._anim = anim
-
-    def _center_on_parent(self):
-        if not self.parent():
-            return
-        pg = self.parent().geometry()
-        self.move(
-            pg.center().x() - self.width() // 2,
-            pg.center().y() - self.height() // 2
-        )
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 90))
         painter.end()
         super().paintEvent(event)
 

@@ -1,20 +1,53 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont, QPainter, QBrush, QColor, QPen, QPainterPath
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtGui import QFont, QPainter, QBrush, QColor, QPen, QPainterPath, QMouseEvent, QEnterEvent
+
+
+class CloseButton(QPushButton):
+    """Custom close button with red hover effect"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.NoFocus)
+        self._hovered = False
+        
+    def enterEvent(self, event: QEnterEvent):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Background circle
+        if self._hovered:
+            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
+        else:
+            painter.setBrush(Qt.transparent)
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(4, 4, 24, 24)
+        
+        # X mark
+        if self._hovered:
+            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
+        else:
+            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
+        margin = 11
+        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
+        painter.drawLine(32 - margin, margin, margin, 32 - margin)
 
 
 class ConfirmDeleteDialog(QDialog):
-    """
-    Modern confirm dialog:
-    - Frameless + translucent background
-    - Rounded card container
-    - Professional icon (custom drawn)
-    - Title + subtitle (rich text)
-    - Cancel + Delete buttons
-    - Smooth fade-in animation
-    """
+    
 
     def __init__(self, parent=None, lab_name: str = "", pcs_count: int = 0):
         super().__init__(parent)
@@ -25,9 +58,27 @@ class ConfirmDeleteDialog(QDialog):
 
         self._lab_name = lab_name
         self._pcs_count = pcs_count
+        
+        # For window dragging
+        self._drag_position: QPoint | None = None
 
         self._build_ui(lab_name, pcs_count)
         self._animate_in()
+
+    # ---------------- Window Dragging ----------------
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self._drag_position is not None:
+            delta = event.globalPosition().toPoint() - self._drag_position
+            self.move(self.pos() + delta)
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = None
 
     def _build_ui(self, lab_name: str, pcs_count: int):
         root = QVBoxLayout(self)
@@ -39,10 +90,10 @@ class ConfirmDeleteDialog(QDialog):
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setContentsMargins(24, 16, 24, 20)
         layout.setSpacing(16)
 
-        # Header row with custom icon widget
+        # Header row with custom icon widget and close button
         header = QHBoxLayout()
         header.setSpacing(16)
 
@@ -110,6 +161,12 @@ class ConfirmDeleteDialog(QDialog):
         title_col.addWidget(subtitle)
 
         header.addLayout(title_col, 1)
+        
+        # Close button
+        self.close_btn = CloseButton()
+        self.close_btn.setObjectName("ConfirmDeleteCloseBtn")
+        self.close_btn.clicked.connect(self.reject)
+        header.addWidget(self.close_btn)
 
         layout.addLayout(header)
 

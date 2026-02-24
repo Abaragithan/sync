@@ -48,7 +48,6 @@ class MainWindow(QMainWindow):
         self.dashboard.back_requested.connect(lambda: self.stack.setCurrentWidget(self.welcome))
         self.dashboard.lab_selected.connect(self._handle_lab_selection)
         self.dashboard.edit_lab_requested.connect(self._go_lab_edit)
-        self.dashboard.theme_toggled.connect(self._apply_theme)
 
         self.lab.back_requested.connect(lambda: self.stack.setCurrentWidget(self.dashboard))
         self.lab.next_to_software.connect(self._go_software)
@@ -88,12 +87,7 @@ class MainWindow(QMainWindow):
         self.lab._on_lab_changed(lab_name)
         self.stack.setCurrentWidget(self.lab)
 
-    def _apply_theme(self, theme: str):
-        theme = (theme or "dark").lower()
-        self.state.theme = theme
-        self.state.save()
-        QApplication.instance().setStyleSheet(get_qss(theme))
-
+    
     def _go_status_page(self):
         self.status_page.load_pcs()
         self.stack.setCurrentWidget(self.status_page)

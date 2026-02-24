@@ -7,8 +7,8 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QSizePolicy, QLineEdit, QSpinBox
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPainter, QColor, QPen, QFont
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtGui import QPainter, QColor, QPen, QFont, QMouseEvent, QEnterEvent
 
 
 @dataclass
@@ -16,6 +16,47 @@ class CreateLabResult:
     lab_name: str
     layout: dict
     ips: list[str]
+
+
+class CloseButton(QPushButton):
+    """Custom close button with red hover effect"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.NoFocus)
+        self._hovered = False
+        
+    def enterEvent(self, event: QEnterEvent):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Background circle
+        if self._hovered:
+            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
+        else:
+            painter.setBrush(Qt.transparent)
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(4, 4, 24, 24)
+        
+        # X mark
+        if self._hovered:
+            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
+        else:
+            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
+        margin = 11
+        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
+        painter.drawLine(32 - margin, margin, margin, 32 - margin)
 
 
 class CreateLabDialog(QDialog):
@@ -29,6 +70,8 @@ class CreateLabDialog(QDialog):
     - IP Range is TYPEABLE (start + end)
     - Live validation + warning pill
     - Fade-in animation
+    - Movable by dragging
+    - Close button in top-right corner with red hover effect
 
     NOTE: Functionality is unchanged (get_data structure, validation rules, etc.)
     """
@@ -41,11 +84,29 @@ class CreateLabDialog(QDialog):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
         self._result: CreateLabResult | None = None
+        
+        # For window dragging
+        self._drag_position: QPoint | None = None
 
         self._build_ui()
         self._wire_signals()
         self._animate_in()
         self._validate_live()
+
+    # ---------------- Window Dragging ----------------
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self._drag_position is not None:
+            delta = event.globalPosition().toPoint() - self._drag_position
+            self.move(self.pos() + delta)
+            self._drag_position = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self._drag_position = None
 
     # ---------------- UI ----------------
     def _build_ui(self):
@@ -61,7 +122,7 @@ class CreateLabDialog(QDialog):
         layout.setContentsMargins(24, 22, 24, 18)
         layout.setSpacing(16)
 
-        # --- Header row (icon + title/subtitle) ---
+        # --- Header row (icon + title/subtitle + close button) ---
         header = QHBoxLayout()
         header.setSpacing(16)
 
@@ -110,6 +171,13 @@ class CreateLabDialog(QDialog):
         title_col.addWidget(subtitle)
 
         header.addLayout(title_col, 1)
+        
+        # Close button - using updated CloseButton class with red hover
+        self.close_btn = CloseButton()
+        self.close_btn.setObjectName("CreateLabCloseBtn")
+        
+        header.addWidget(self.close_btn)
+        
         layout.addLayout(header)
 
         # Divider
@@ -248,6 +316,7 @@ class CreateLabDialog(QDialog):
         return type("SpinWrap", (), {"container": container, "spin": sp})
 
     def _wire_signals(self):
+        self.close_btn.clicked.connect(self.reject)
         self.cancel_btn.clicked.connect(self.reject)
         self.create_btn.clicked.connect(self._on_create)
 

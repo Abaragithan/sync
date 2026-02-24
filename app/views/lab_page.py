@@ -1,242 +1,96 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
-    QFrame, QGridLayout, QScrollArea, QMenu, QMessageBox, QDialog,
-    QStyledItemDelegate, QListView, QStyleOptionViewItem
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+    QFrame, QScrollArea, QComboBox, QGridLayout, QSizePolicy,
+    QMessageBox, QApplication, QDialog, QMenu
 )
-from PySide6.QtCore import Signal, Qt, QRect, QSize, QEvent
-from PySide6.QtGui import QPainter, QColor
-from PySide6.QtWidgets import QStyle
+from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QFont, QColor, QPalette
 
+from .dialogs.edit_pc_ip_dialog import EditPcIpDialog
+from .dialogs.glass_messagebox import show_glass_message
+from .dialogs.confirm_delete_dialog import ConfirmDeleteDialog
 from .widgets.pc_card import PcCard
-from .create_lab_dialog import CreateLabDialog
-
-
-class LabComboDelegate(QStyledItemDelegate):
-    def __init__(self, combo: "LabComboBox"):
-        super().__init__(combo)
-        self.combo = combo
-        self.btn_size = 12
-        self.gap = 8
-
-    def sizeHint(self, option, index):
-        base = super().sizeHint(option, index)
-        return QSize(base.width(), max(base.height(), 34))
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
-        painter.save()
-
-        lab = index.data(Qt.DisplayRole) or ""
-        rect = option.rect
-
-        bg_normal = QColor("#111827")
-        bg_hover = QColor("#1f2937")
-        bg_selected = QColor("#2563eb")
-        text_normal = QColor("#e5e7eb")
-        text_selected = QColor("#ffffff")
-        icon_color = QColor("#e5e7eb")
-
-        is_selected = bool(option.state & QStyle.State_Selected)
-        is_hover = bool(option.state & QStyle.State_MouseOver)
-
-        if is_selected:
-            painter.fillRect(rect, bg_selected)
-        elif is_hover:
-            painter.fillRect(rect, bg_hover)
-        else:
-            painter.fillRect(rect, bg_normal)
-
-        right_padding = (self.btn_size * 2) + (self.gap * 3)
-        text_rect = QRect(
-            rect.left() + 12,
-            rect.top(),
-            rect.width() - right_padding,
-            rect.height()
-        )
-
-        painter.setPen(text_selected if is_selected else text_normal)
-        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, lab)
-
-        edit_rect = self.edit_rect(rect)
-        del_rect = self.delete_rect(rect)
-
-        painter.setPen(icon_color)
-        painter.drawText(edit_rect, Qt.AlignCenter, "✏")
-        painter.drawText(del_rect, Qt.AlignCenter, "🗑")
-
-        painter.restore()
-
-    def edit_rect(self, rect: QRect) -> QRect:
-        x = rect.right() - (self.btn_size * 2) - (self.gap * 2)
-        y = rect.top() + (rect.height() - self.btn_size) // 2
-        return QRect(x, y, self.btn_size, self.btn_size)
-
-    def delete_rect(self, rect: QRect) -> QRect:
-        x = rect.right() - self.btn_size - self.gap
-        y = rect.top() + (rect.height() - self.btn_size) // 2
-        return QRect(x, y, self.btn_size, self.btn_size)
-
-
-class LabComboBox(QComboBox):
-    edit_requested = Signal(str)
-    delete_requested = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self._view = QListView()
-        self.setView(self._view)
-
-        self._delegate = LabComboDelegate(self)
-        self.setItemDelegate(self._delegate)
-
-        self._view.setStyleSheet("""
-            QListView {
-                background: #111827;
-                color: #e5e7eb;
-                border: 1px solid #334155;
-                outline: none;
-            }
-        """)
-
-        self._view.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if obj == self._view.viewport() and event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
-            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
-
-            index = self._view.indexAt(pos)
-            if not index.isValid():
-                return False
-
-            rect = self._view.visualRect(index)
-            edit_rect = self._delegate.edit_rect(rect)
-            del_rect = self._delegate.delete_rect(rect)
-            lab = index.data(Qt.DisplayRole)
-
-            if edit_rect.contains(pos):
-                self.edit_requested.emit(lab)
-                return True
-
-            if del_rect.contains(pos):
-                self.delete_requested.emit(lab)
-                return True
-
-            return False
-
-        return super().eventFilter(obj, event)
 
 
 class LabPage(QWidget):
     back_requested = Signal()
     next_to_software = Signal()
     edit_lab_requested = Signal(str)
+    delete_lab_requested = Signal(str)
 
-    def __init__(self, inventory_manager, state):
+    def __init__(self, inventory_manager, state=None):
         super().__init__()
         self.inventory_manager = inventory_manager
         self.state = state
+        self.setObjectName("LabPage")
 
-        if not hasattr(self.state, "selected_targets") or self.state.selected_targets is None:
-            self.state.selected_targets = []
-
+        self.current_lab = None
+        self.pcs = []
+        self.selected_pcs = set()
+        
+        # For tracking PC cards
         self.cards_by_ip = {}
         self.part_frames = []
         self.part_grids = []
 
         self._build_ui()
-        self._load_labs()
+        self._apply_styles()
+        
+        # Initialize the lab selector after UI is built
+        QTimer.singleShot(0, self.on_page_show)
 
     def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(6)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(20)
 
-        # --- Header ---
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(10)
+        # ========== HEADER ==========
+        header = QHBoxLayout()
+        header.setSpacing(16)
 
+        # Back button
         self.back_btn = QPushButton("← Back")
-        self.back_btn.setObjectName("SecondaryBtn")
+        self.back_btn.setObjectName("BackButton")
+        self.back_btn.setCursor(Qt.PointingHandCursor)
+        self.back_btn.setFixedHeight(38)
         self.back_btn.setFixedWidth(90)
         self.back_btn.clicked.connect(self.back_requested.emit)
-        header_layout.addWidget(self.back_btn)
+        header.addWidget(self.back_btn)
 
-        title = QLabel("Lab Deployment")
-        title.setStyleSheet("font-size:26px; font-weight:800;")
-        header_layout.addWidget(title)
+        # Lab info
+        lab_info = QVBoxLayout()
+        lab_info.setSpacing(4)
 
-        header_layout.addStretch()
-        root.addLayout(header_layout)
+        self.lab_title = QLabel("Lab Deployment")
+        self.lab_title.setObjectName("PageTitle")
+        self.lab_title.setFont(QFont("Segoe UI", 24, QFont.Bold))
 
-        # --- Controls Row ---
-        controls = QHBoxLayout()
-        controls.setSpacing(5)
+        self.lab_subtitle = QLabel("Select a lab to begin")
+        self.lab_subtitle.setObjectName("SubText")
 
-        controls.addWidget(QLabel("Lab:"))
+        lab_info.addWidget(self.lab_title)
+        lab_info.addWidget(self.lab_subtitle)
+        header.addLayout(lab_info, 1)
 
-        self.lab_combo = LabComboBox()
+        # Lab selector - FIXED version
+        self.lab_combo = QComboBox()
+        self.lab_combo.setObjectName("LabSelector")
+        self.lab_combo.setCursor(Qt.PointingHandCursor)
+        self.lab_combo.setMinimumWidth(220)
+        self.lab_combo.setFixedHeight(38)
         self.lab_combo.currentTextChanged.connect(self._on_lab_changed)
-        self.lab_combo.edit_requested.connect(self._edit_lab_from_popup)
-        self.lab_combo.delete_requested.connect(self._delete_lab_from_popup)
-        controls.addWidget(self.lab_combo)
+        header.addWidget(self.lab_combo)
 
-        controls.addSpacing(10)
+        main_layout.addLayout(header)
 
-        controls.addWidget(QLabel("Target OS:"))
-        self.os_combo = QComboBox()
-        self.os_combo.addItems(["Windows", "Linux"])
-        self.os_combo.currentTextChanged.connect(self._on_target_os_changed)
-        self.os_combo.setFixedWidth(120)
-        controls.addWidget(self.os_combo)
-
-        controls.addStretch()
-
-        self.create_lab_btn = QPushButton("➕ Create Lab")
-        self.create_lab_btn.setStyleSheet("""
-            QPushButton {
-                background: #059669;
-                color: white;
-                padding: 6px 16px;
-                border-radius: 6px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #047857;
-            }
-            QPushButton:pressed {
-                background: #065f46;
-            }
-        """)
-        self.create_lab_btn.clicked.connect(self._create_lab)
-        controls.addWidget(self.create_lab_btn)
-
-        controls.addSpacing(12)
-
-        self.select_btn = QPushButton("Select PCs")
-        self.select_btn.setStyleSheet("""
-            QPushButton {
-                background: #7c3aed;
-                color: white;
-                padding: 6px 16px;
-                border-radius: 6px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #6d28d9;
-            }
-            QPushButton:pressed {
-                background: #5b21b6;
-            }
-        """)
-        self.select_btn.clicked.connect(self._open_select_menu)
-        controls.addWidget(self.select_btn)
-
-        root.addLayout(controls)
-
-        # --- Scroll Area ---
+        # ========== MAIN CONTENT ==========
+        # Scroll area with horizontal centering
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("QScrollArea{border:none;}")
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setObjectName("LabScroll")
 
         # Outer container for vertical centering
         self.wrap = QWidget()
@@ -253,76 +107,277 @@ class LabPage(QWidget):
         self.wrap_layout.setAlignment(Qt.AlignHCenter)
 
         outer.addWidget(row_holder, 0, Qt.AlignHCenter)
-
         outer.addStretch(1)
 
         self.scroll.setWidget(self.wrap)
-        root.addWidget(self.scroll, 1)
+        main_layout.addWidget(self.scroll, 1)
 
-        # --- Footer ---
+        # ========== FOOTER ==========
         footer = QFrame()
         footer.setObjectName("FooterBar")
-        f = QHBoxLayout(footer)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(16, 12, 16, 12)
+        footer_layout.setSpacing(16)
 
+        # Left side - Lab action buttons
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+
+        self.select_btn = QPushButton("Select PCs")
+        self.select_btn.setObjectName("ActionButton")
+        self.select_btn.setCursor(Qt.PointingHandCursor)
+        self.select_btn.setFixedHeight(38)
+        self.select_btn.clicked.connect(self._open_select_menu)
+        actions.addWidget(self.select_btn)
+
+        self.edit_lab_btn = QPushButton("✏️ Edit Lab")
+        self.edit_lab_btn.setObjectName("ActionButton")
+        self.edit_lab_btn.setCursor(Qt.PointingHandCursor)
+        self.edit_lab_btn.setFixedHeight(38)
+        self.edit_lab_btn.clicked.connect(self._edit_lab)
+        actions.addWidget(self.edit_lab_btn)
+
+        self.delete_lab_btn = QPushButton("🗑️ Delete Lab")
+        self.delete_lab_btn.setObjectName("DeleteButton")
+        self.delete_lab_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_lab_btn.setFixedHeight(38)
+        self.delete_lab_btn.clicked.connect(self._confirm_delete_lab)
+        actions.addWidget(self.delete_lab_btn)
+
+        actions.addStretch()
+        footer_layout.addLayout(actions, 2)
+
+        # Center - PC count
         self.count_lbl = QLabel("No PCs selected")
-        f.addWidget(self.count_lbl)
+        self.count_lbl.setObjectName("PCCountFooter")
+        self.count_lbl.setAlignment(Qt.AlignCenter)
+        footer_layout.addWidget(self.count_lbl, 1)
 
-        f.addStretch()
-
-        self.target_os_lbl = QLabel("Target OS: WINDOWS")
-        f.addWidget(self.target_os_lbl)
+        # Right side - Next button
+        right_actions = QHBoxLayout()
+        right_actions.setSpacing(12)
 
         self.next_btn = QPushButton("Next → Software")
+        self.next_btn.setObjectName("PrimaryButton")
+        self.next_btn.setCursor(Qt.PointingHandCursor)
+        self.next_btn.setFixedHeight(42)
+        self.next_btn.setFixedWidth(150)
         self.next_btn.setEnabled(False)
-        self.next_btn.setStyleSheet("""
-            QPushButton {
-                background:#2563eb;
-                color:white;
-                padding:8px 16px;
-                border-radius:8px;
-                font-weight:600;
+        self.next_btn.clicked.connect(self.next_to_software.emit)
+        right_actions.addWidget(self.next_btn)
+
+        footer_layout.addLayout(right_actions, 1)
+
+        main_layout.addWidget(footer)
+
+    def _apply_styles(self):
+        """Apply light theme styles"""
+        self.setStyleSheet("""
+            /* Page Title */
+            QLabel#PageTitle {
+                color: #0f172a;
+                font-size: 24px;
+                font-weight: 800;
+                background: transparent;
             }
-            QPushButton:disabled {
-                background:#334155;
-                color:#94a3b8;
+            
+            QLabel#SubText {
+                color: #475569;
+                font-size: 14px;
+                background: transparent;
             }
-            QPushButton:hover:!disabled {
-                background:#1d4ed8;
+            
+            /* Section Cards */
+            QFrame#SectionCard {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                margin: 0px;
+            }
+            
+            QLabel#SectionTitle {
+                color: #0f172a;
+                font-size: 16px;
+                font-weight: 700;
+                padding: 8px 0px;
+                background: transparent;
+            }
+            
+            /* Footer Bar */
+            QFrame#FooterBar {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+            }
+            
+            /* Action Buttons */
+            QPushButton#ActionButton {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            
+            QPushButton#ActionButton:hover {
+                background-color: #f8fafc;
+                border: 1px solid #2563eb;
+            }
+            
+            QPushButton#ActionButton:pressed {
+                background-color: #f1f5f9;
+            }
+            
+            /* Delete Button */
+            QPushButton#DeleteButton {
+                background-color: #ffffff;
+                border: 1px solid #ef4444;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 600;
+                color: #ef4444;
+            }
+            
+            QPushButton#DeleteButton:hover {
+                background-color: #fef2f2;
+                border: 1px solid #dc2626;
+                color: #dc2626;
+            }
+            
+            QPushButton#DeleteButton:pressed {
+                background-color: #fee2e2;
+            }
+            
+            /* Primary Button */
+            QPushButton#PrimaryButton {
+                background-color: #2563eb;
+                border: none;
+                border-radius: 8px;
+                color: #ffffff;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            
+            QPushButton#PrimaryButton:hover {
+                background-color: #1d4ed8;
+            }
+            
+            QPushButton#PrimaryButton:pressed {
+                background-color: #1e40af;
+            }
+            
+            QPushButton#PrimaryButton:disabled {
+                background-color: #cbd5e1;
+                color: #64748b;
+            }
+            
+            /* Back Button */
+            QPushButton#BackButton {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            
+            QPushButton#BackButton:hover {
+                background-color: #f8fafc;
+                border: 1px solid #2563eb;
+            }
+            
+            /* Lab Selector - FIXED for better visibility */
+            QComboBox#LabSelector {
+                background-color: #ffffff;
+                border: 1px solid #2563eb;
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: #0f172a;
+                font-size: 14px;
+                font-weight: 500;
+                min-width: 220px;
+            }
+            
+            QComboBox#LabSelector:hover {
+                border: 2px solid #2563eb;
+                background-color: #f8fafc;
+            }
+            
+            QComboBox#LabSelector::drop-down {
+                border: none;
+                width: 30px;
+            }
+            
+            QComboBox#LabSelector::down-arrow {
+                image: none;
+                width: 0px;
+            }
+            
+            QComboBox#LabSelector QAbstractItemView {
+                background-color: #ffffff;
+                border: 1px solid #2563eb;
+                border-radius: 8px;
+                padding: 4px;
+                outline: none;
+            }
+            
+            QComboBox#LabSelector QAbstractItemView::item {
+                padding: 10px 16px;
+                border-radius: 4px;
+                color: #0f172a;
+                font-size: 13px;
+                min-height: 30px;
+            }
+            
+            QComboBox#LabSelector QAbstractItemView::item:selected {
+                background-color: #eff6ff;
+                color: #2563eb;
+            }
+            
+            QComboBox#LabSelector QAbstractItemView::item:hover {
+                background-color: #f8fafc;
+            }
+            
+            /* Footer PC count */
+            QLabel#PCCountFooter {
+                color: #0f172a;
+                font-size: 14px;
+                font-weight: 600;
+                background: transparent;
+            }
+            
+            /* Scroll Area */
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            
+            QScrollBar:vertical {
+                background-color: #f1f5f9;
+                width: 8px;
+                border-radius: 4px;
+            }
+            
+            QScrollBar::handle:vertical {
+                background-color: #cbd5e1;
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            
+            QScrollBar::handle:vertical:hover {
+                background-color: #94a3b8;
+            }
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
-        self.next_btn.clicked.connect(self.next_to_software.emit)
-        f.addWidget(self.next_btn)
-
-        root.addWidget(footer)
-
-    def _create_lab(self):
-        dlg = CreateLabDialog(self)
-        if dlg.exec() != QDialog.Accepted:
-            return
-
-        data = dlg.get_data()
-        layout = data["layout"]
-        ips = data["ips"]
-
-        pcs = []
-        idx = 0
-        for sec in range(1, layout["sections"] + 1):
-            for r in range(1, layout["rows"] + 1):
-                for c in range(1, layout["cols"] + 1):
-                    pcs.append({
-                        "name": f"PC-{idx+1:03d}",
-                        "ip": ips[idx],
-                        "section": sec,
-                        "row": r,
-                        "col": c
-                    })
-                    idx += 1
-
-        self.inventory_manager.add_lab_with_layout(data["lab_name"], layout, pcs)
-        self._load_labs()
-        self.lab_combo.setCurrentText(data["lab_name"])
 
     def _clear_sections(self):
+        """Clear all section frames and cards"""
         for frame in self.part_frames:
             frame.deleteLater()
         self.part_frames.clear()
@@ -336,17 +391,30 @@ class LabPage(QWidget):
                 w.deleteLater()
 
     def _render_lab(self):
+        """Render PCs organized by sections"""
         self._clear_sections()
 
-        lab = self.state.current_lab
-        layout = self.inventory_manager.get_lab_layout(lab)
-        pcs = self.inventory_manager.get_pcs_for_lab(lab)
+        if not self.current_lab:
+            # Show empty state
+            empty_label = QLabel("Select a lab to view workstations")
+            empty_label.setAlignment(Qt.AlignCenter)
+            empty_label.setStyleSheet("color: #94a3b8; font-size: 14px; padding: 40px;")
+            self.wrap_layout.addWidget(empty_label)
+            return
+
+        layout = self.inventory_manager.get_lab_layout(self.current_lab)
+        pcs = self.inventory_manager.get_pcs_for_lab(self.current_lab)
 
         if not layout or not pcs:
+            empty_label = QLabel("No workstations in this lab")
+            empty_label.setAlignment(Qt.AlignCenter)
+            empty_label.setStyleSheet("color: #94a3b8; font-size: 14px; padding: 40px;")
+            self.wrap_layout.addWidget(empty_label)
             return
 
         self.wrap_layout.addStretch(1)
 
+        # Create section frames
         for s in range(layout["sections"]):
             frame = QFrame()
             frame.setObjectName("SectionCard")
@@ -374,6 +442,7 @@ class LabPage(QWidget):
 
         self.wrap_layout.addStretch(1)
 
+        # Create PC cards
         for pc in pcs:
             card = PcCard(pc["name"], pc["ip"])
             card.setFixedSize(60, 60)
@@ -388,9 +457,12 @@ class LabPage(QWidget):
             c = pc["col"] - 1
             grid.addWidget(card, r, c, alignment=Qt.AlignCenter)
 
+        self._update_footer()
+
     def _open_select_menu(self):
+        """Open selection menu for PCs"""
         if not self.cards_by_ip:
-            QMessageBox.information(self, "No PCs", "No PCs loaded for this lab.")
+            show_glass_message(self, "No PCs", "No PCs loaded for this lab.", QMessageBox.Information)
             return
 
         menu = QMenu(self)
@@ -401,72 +473,122 @@ class LabPage(QWidget):
         if act == a_all:
             for card in self.cards_by_ip.values():
                 card.set_selected(True)
-            self.state.selected_targets = list(self.cards_by_ip.keys())
+            self.selected_pcs = set(self.cards_by_ip.keys())
         elif act == a_clear:
             for card in self.cards_by_ip.values():
                 card.set_selected(False)
-            self.state.selected_targets.clear()
+            self.selected_pcs.clear()
 
         self._update_footer()
 
     def _unselect_pc(self, ip):
+        """Unselect a specific PC"""
         card = self.cards_by_ip.get(ip)
         if card:
             card.set_selected(False)
-        if ip in self.state.selected_targets:
-            self.state.selected_targets.remove(ip)
+        if ip in self.selected_pcs:
+            self.selected_pcs.remove(ip)
         self._update_footer()
 
     def _on_toggle(self, ip, selected):
+        """Handle PC card toggle"""
         if selected:
-            if ip not in self.state.selected_targets:
-                self.state.selected_targets.append(ip)
+            self.selected_pcs.add(ip)
         else:
-            if ip in self.state.selected_targets:
-                self.state.selected_targets.remove(ip)
+            if ip in self.selected_pcs:
+                self.selected_pcs.remove(ip)
         self._update_footer()
 
     def _update_footer(self):
-        n = len(self.state.selected_targets)
+        """Update footer based on selection"""
+        n = len(self.selected_pcs)
         self.next_btn.setEnabled(n > 0)
         self.count_lbl.setText(f"{n} PC(s) selected" if n else "No PCs selected")
 
-    def _edit_lab_from_popup(self, lab: str):
-        if lab:
-            self.edit_lab_requested.emit(lab)
-            self.lab_combo.hidePopup()
-
-    def _delete_lab_from_popup(self, lab: str):
-        if not lab:
+    def _on_lab_changed(self, lab_name: str):
+        """Handle lab selection change"""
+        if not lab_name or lab_name == "No labs available":
+            self.current_lab = None
+            self.pcs = []
+            self.selected_pcs.clear()
+            self._render_lab()
+            self.lab_subtitle.setText("Select a lab to begin")
+            self._update_footer()
             return
 
-        if QMessageBox.question(self, "Delete Lab", f"Delete lab '{lab}' completely?") != QMessageBox.Yes:
-            return
-
-        if self.inventory_manager.delete_lab(lab):
-            if self.state.current_lab == lab:
-                self.state.current_lab = ""
-                self.state.selected_targets.clear()
-                self._clear_sections()
-                self._update_footer()
-
-            self._load_labs()
-            self.lab_combo.hidePopup()
-
-    def _load_labs(self):
-        self.lab_combo.clear()
-        self.lab_combo.addItems(self.inventory_manager.get_all_labs())
-        self._update_os_label()
-
-    def _on_lab_changed(self, lab):
-        self.state.current_lab = lab
-        self.state.selected_targets.clear()
+        self.current_lab = lab_name
+        self.pcs = self.inventory_manager.get_pcs_for_lab(lab_name) or []
+        self.selected_pcs.clear()
         self._render_lab()
-        self._update_footer()
 
-    def _on_target_os_changed(self, txt):
-        self.state.target_os = "windows" if "win" in txt.lower() else "linux"
-        self._update_os_label()
+        # Update header
+        self.lab_subtitle.setText(f"Managing: {lab_name}")
 
-    def _update_os_label(self):
-        self.target_os_lbl.setText(f"Target OS: {self.state.target_os.upper()}")
+    def _edit_lab(self):
+        """Edit current lab"""
+        if self.current_lab:
+            self.edit_lab_requested.emit(self.current_lab)
+
+    def _confirm_delete_lab(self):
+        """Confirm and delete current lab"""
+        if not self.current_lab:
+            show_glass_message(self, "No Lab Selected", "Please select a lab first", QMessageBox.Warning)
+            return
+
+        pcs = self.inventory_manager.get_pcs_for_lab(self.current_lab)
+        dlg = ConfirmDeleteDialog(self, lab_name=self.current_lab, pcs_count=len(pcs))
+
+        if dlg.exec() == QDialog.Accepted:
+            if self.inventory_manager.delete_lab(self.current_lab):
+                self.current_lab = None
+                self.selected_pcs.clear()
+                self.refresh_labs()
+                self._render_lab()
+                self.lab_subtitle.setText("Select a lab to begin")
+                show_glass_message(self, "Deleted", f"Lab has been deleted.", QMessageBox.Information)
+            else:
+                show_glass_message(self, "Error", f"Failed to delete lab.", QMessageBox.Critical)
+
+    def refresh_labs(self):
+        """Refresh lab list"""
+        # Store current selection to restore it later
+        current_text = self.lab_combo.currentText()
+        
+        # Clear and repopulate
+        self.lab_combo.clear()
+        labs = self.inventory_manager.get_all_labs()
+        
+        if labs:
+            self.lab_combo.addItems(labs)
+            # Try to restore previous selection
+            if current_text and current_text in labs:
+                self.lab_combo.setCurrentText(current_text)
+            elif labs:
+                # If no previous selection or it's invalid, select first lab
+                self.lab_combo.setCurrentIndex(0)
+                # Trigger the change if this is a new selection
+                if self.lab_combo.currentText() != current_text:
+                    self._on_lab_changed(self.lab_combo.currentText())
+        else:
+            self.lab_combo.addItem("No labs available")
+            self.lab_combo.setCurrentIndex(0)
+
+    def on_page_show(self):
+        """Called when page is shown - refresh the display"""
+        self.refresh_labs()
+        # Force the current lab to be set
+        if self.current_lab:
+            # Make sure the combo box shows the current lab
+            index = self.lab_combo.findText(self.current_lab)
+            if index >= 0:
+                self.lab_combo.setCurrentIndex(index)
+            else:
+                # If current lab not found, clear it
+                self.current_lab = None
+                self._render_lab()
+                self.lab_subtitle.setText("Select a lab to begin")
+        else:
+            # If no current lab but there are labs, select the first one
+            if self.lab_combo.count() > 0 and self.lab_combo.currentText() != "No labs available":
+                self.current_lab = self.lab_combo.currentText()
+                self._on_lab_changed(self.current_lab)

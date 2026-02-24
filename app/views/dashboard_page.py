@@ -18,243 +18,6 @@ import ipaddress
 
 
 # ────────────────────────────────────────────────
-#   ThemeToggle (UNCHANGED - DO NOT EDIT)
-# ────────────────────────────────────────────────
-class ThemeToggle(QPushButton):
-    def _get_circle_position(self):
-        return self._circle_position
-
-    def _set_circle_position(self, pos):
-        self._circle_position = pos
-        self.update()
-
-    def _get_rotation(self):
-        return self._rotation
-
-    def _set_rotation(self, rot):
-        self._rotation = rot
-        self.update()
-
-    def _get_pulse_opacity(self):
-        return self._pulse_opacity
-
-    def _set_pulse_opacity(self, opacity):
-        self._pulse_opacity = opacity
-        self.update()
-
-    def _get_sparkle_opacity(self):
-        return self._sparkle_opacity_val
-
-    def _set_sparkle_opacity(self, opacity):
-        self._sparkle_opacity_val = opacity
-        self.update()
-
-    circle_position = Property(float, _get_circle_position, _set_circle_position)
-    rotation = Property(float, _get_rotation, _set_rotation)
-    pulse_opacity = Property(float, _get_pulse_opacity, _set_pulse_opacity)
-    sparkle_opacity = Property(float, _get_sparkle_opacity, _set_sparkle_opacity)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setCheckable(True)
-        self.setFixedSize(90, 44)
-        self.setCursor(Qt.PointingHandCursor)
-        self._dark_theme = False
-
-        self._circle_position = 0.0
-        self._rotation = 0
-        self._pulse_opacity = 1.0
-        self._sparkle_opacity_val = 0.0
-        self._sparkle_points = []
-
-        self._animation = QPropertyAnimation(self, b"circle_position")
-        self._animation.setDuration(500)
-        self._animation.setEasingCurve(QEasingCurve.OutBack)
-
-        self._rotation_anim = QPropertyAnimation(self, b"rotation")
-        self._rotation_anim.setDuration(600)
-        self._rotation_anim.setEasingCurve(QEasingCurve.OutCubic)
-
-        self._pulse_anim = QPropertyAnimation(self, b"pulse_opacity")
-        self._pulse_anim.setDuration(300)
-        self._pulse_anim.setEasingCurve(QEasingCurve.OutCubic)
-
-        self._sparkle_anim = QPropertyAnimation(self, b"sparkle_opacity")
-        self._sparkle_anim.setDuration(800)
-        self._sparkle_anim.setEasingCurve(QEasingCurve.OutQuad)
-
-        self.update_style()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
-
-        rect = self.rect()
-
-        if self._dark_theme:
-            gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-            gradient.setColorAt(0, QColor(8, 20, 36))
-            gradient.setColorAt(1, QColor(20, 35, 55))
-            bg_color = gradient
-            border_color = QColor(60, 90, 130)
-            text_color = QColor(220, 240, 255)
-        else:
-            gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-            gradient.setColorAt(0, QColor(255, 230, 100))
-            gradient.setColorAt(1, QColor(255, 210, 60))
-            bg_color = gradient
-            border_color = QColor(255, 200, 50)
-            text_color = QColor(80, 60, 20)
-
-        painter.setBrush(QBrush(bg_color))
-        painter.setPen(QPen(border_color, 1.2))
-        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 22, 22)
-
-        if self._dark_theme and self.sparkle_opacity > 0.01:
-            painter.save()
-            painter.setOpacity(self.sparkle_opacity)
-            painter.setBrush(QColor(255, 255, 200, 180))
-            painter.setPen(Qt.NoPen)
-            for x, y in self._sparkle_points:
-                size = 2 + (x * y) % 3
-                painter.drawEllipse(int(x), int(y), int(size), int(size))
-            painter.restore()
-
-        painter.save()
-        painter.setOpacity(self.pulse_opacity)
-        font = QFont("Segoe UI", 8, QFont.Bold)
-        painter.setFont(font)
-        painter.setPen(QPen(text_color))
-        text_rect = QRect(10, 0, rect.width() - 20, rect.height())
-
-        if self._dark_theme:
-            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignRight, "DARK")
-        else:
-            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, "LIGHT")
-        painter.restore()
-
-        circle_size = 34
-        circle_y = (rect.height() - circle_size) // 2
-        circle_x = int(4 + (self._circle_position * (rect.width() - circle_size - 8)))
-
-        painter.setBrush(QColor(0, 0, 0, 30))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(circle_x + 1, circle_y + 2, circle_size, circle_size)
-
-        circle_gradient = QLinearGradient(circle_x, circle_y, circle_x + circle_size, circle_y + circle_size)
-
-        if self._dark_theme:
-            circle_gradient.setColorAt(0, QColor(230, 245, 255))
-            circle_gradient.setColorAt(1, QColor(200, 225, 255))
-            circle_color = QBrush(circle_gradient)
-            circle_border = QColor(180, 210, 255)
-        else:
-            circle_gradient.setColorAt(0, QColor(255, 255, 220))
-            circle_gradient.setColorAt(1, QColor(255, 230, 100))
-            circle_color = QBrush(circle_gradient)
-            circle_border = QColor(255, 210, 80)
-
-        painter.setBrush(circle_color)
-        painter.setPen(QPen(circle_border, 1.2))
-        painter.drawEllipse(circle_x, circle_y, circle_size, circle_size)
-
-        painter.save()
-        painter.translate(circle_x + circle_size // 2, circle_y + circle_size // 2)
-
-        if self._dark_theme:
-            painter.rotate(self._rotation * 0.3)
-            painter.setBrush(QColor(255, 255, 220, 40))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(-10, -10, 20, 20)
-            painter.setPen(QPen(QColor(255, 255, 210), 1.2))
-            painter.setBrush(QColor(255, 255, 230))
-            painter.drawEllipse(-8, -8, 16, 16)
-            painter.setBrush(QColor(230, 230, 210))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(-5, -4, 5, 5)
-            painter.drawEllipse(0, -2, 4, 4)
-            painter.drawEllipse(3, 2, 3, 3)
-            painter.setBrush(QColor(255, 255, 220))
-            painter.drawEllipse(-14, -10, 2, 2)
-            painter.drawEllipse(12, -8, 2, 2)
-            painter.drawEllipse(-15, 5, 2, 2)
-        else:
-            painter.rotate(self._rotation)
-            painter.setBrush(QColor(255, 230, 80, 50))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(-12, -12, 24, 24)
-            painter.setPen(QPen(QColor(255, 180, 0), 1.2))
-            painter.setBrush(QColor(255, 240, 100))
-            painter.drawEllipse(-8, -8, 16, 16)
-            painter.setPen(QPen(QColor(255, 220, 80), 2))
-            for i in range(8):
-                painter.save()
-                painter.rotate(i * 45)
-                painter.drawLine(12, 0, 18, 0)
-                painter.restore()
-
-        painter.restore()
-
-        if self.pulse_opacity < 0.95:
-            alpha = int(50 * (1 - self.pulse_opacity))
-            painter.setBrush(QColor(255, 255, 255, alpha))
-            painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 22, 22)
-
-    def update_style(self):
-        self.update()
-
-    def nextCheckState(self):
-        super().nextCheckState()
-        self._dark_theme = not self.isChecked()
-        target_pos = 1.0 if self.isChecked() else 0.0
-
-        self._animation.stop()
-        self._animation.setStartValue(self.circle_position)
-        self._animation.setEndValue(target_pos)
-        self._animation.start()
-
-        self._rotation_anim.stop()
-        self._rotation_anim.setStartValue(0)
-        self._rotation_anim.setEndValue(360)
-        self._rotation_anim.start()
-
-        self._pulse_anim.stop()
-        self._pulse_anim.setStartValue(0.7)
-        self._pulse_anim.setEndValue(1.0)
-        self._pulse_anim.start()
-
-        if self._dark_theme:
-            QTimer.singleShot(150, self._create_sparkles)
-        else:
-            self.sparkle_opacity = 0.0
-
-    def _create_sparkles(self):
-        import random
-        self._sparkle_points = []
-        for _ in range(15):
-            x = random.randint(10, self.width() - 20)
-            y = random.randint(5, self.height() - 15)
-            self._sparkle_points.append((x, y))
-
-        self._sparkle_anim.stop()
-        self._sparkle_anim.setStartValue(0.8)
-        self._sparkle_anim.setEndValue(0.0)
-        self._sparkle_anim.start()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, '_sparkle_points') and self._dark_theme:
-            import random
-            self._sparkle_points = []
-            for _ in range(15):
-                x = random.randint(10, self.width() - 20)
-                y = random.randint(5, self.height() - 15)
-                self._sparkle_points.append((x, y))
-
-
-# ────────────────────────────────────────────────
 #   HoverCard (Smooth Hover Animation)
 # ────────────────────────────────────────────────
 class HoverCard(QFrame):
@@ -305,7 +68,7 @@ class HoverCard(QFrame):
 
 
 # ────────────────────────────────────────────────
-#   TrashButton (Animated Dustbin Icon)
+#   TrashButton (Animated Dustbin Icon - Light Mode Only)
 # ────────────────────────────────────────────────
 class TrashButton(QPushButton):
     def _get_lid_angle(self):
@@ -388,19 +151,11 @@ class TrashButton(QPushButton):
         cx = w // 2
         cy = h // 2
 
-        # Theme detection from property (set from DashboardPage)
-        is_dark = (self.property("theme") != "light")
-
-        if is_dark:
-            bin_color = QColor(220, 80, 80)
-            lid_color = QColor(200, 70, 70)
-            outline = QColor(0, 0, 0, 50)
-            detail = QColor(255, 255, 255, 90)
-        else:
-            bin_color = QColor(200, 60, 60)
-            lid_color = QColor(180, 50, 50)
-            outline = QColor(0, 0, 0, 35)
-            detail = QColor(255, 255, 255, 120)
+        # Light mode colors only
+        bin_color = QColor(200, 60, 60)
+        lid_color = QColor(180, 50, 50)
+        outline = QColor(0, 0, 0, 35)
+        detail = QColor(255, 255, 255, 120)
 
         if self.underMouse():
             bin_color = bin_color.lighter(115)
@@ -445,13 +200,12 @@ class TrashButton(QPushButton):
 
 
 # ────────────────────────────────────────────────
-#   DashboardPage (Max 2 columns + Stats Panel)
+#   DashboardPage (Max 2 columns + Stats Panel - Light Mode Only)
 # ────────────────────────────────────────────────
 class DashboardPage(QWidget):
     lab_selected = Signal(str)
     edit_lab_requested = Signal(str)
     back_requested = Signal()
-    theme_toggled = Signal(str)
 
     def __init__(self, inventory_manager, state=None):
         super().__init__()
@@ -475,7 +229,7 @@ class DashboardPage(QWidget):
         header.addWidget(brand)
 
         header.addStretch()
-        header.addWidget(self._create_theme_toggle())
+        # Theme toggle removed - light mode only
         layout.addLayout(header)
 
         # ─── New Lab Button
@@ -512,26 +266,6 @@ class DashboardPage(QWidget):
         self.scroll.setWidget(self.scroll_widget)
         layout.addWidget(self.scroll, 1)
 
-    def _create_theme_toggle(self):
-        self.theme_switch = ThemeToggle(self)
-        current_theme = getattr(self.state, "theme", "dark") if self.state else "dark"
-        is_light = current_theme == "light"
-
-        self.theme_switch.setChecked(is_light)
-        self.theme_switch._dark_theme = not is_light
-        self.theme_switch.setProperty("circle_position", 1.0 if is_light else 0.0)
-        self.theme_switch.update()
-
-        self.theme_switch.toggled.connect(self._toggle_theme)
-        return self.theme_switch
-
-    def _toggle_theme(self, checked):
-        new_theme = "light" if checked else "dark"
-        if self.state:
-            self.state.theme = new_theme
-        self.theme_toggled.emit(new_theme)
-        self.refresh_labs()
-
     # ─── Row widget: Label + Value
     def _info_row(self, label_text: str, value_text: str) -> QWidget:
         row = QWidget()
@@ -555,7 +289,6 @@ class DashboardPage(QWidget):
         h.addWidget(val, 1)
         return row
 
-    # ✅ UPDATED: only button design changed, no functionality touched
     def _create_lab_card(self, lab_name: str) -> QFrame:
         card = HoverCard()
         card.setObjectName("LabCard")
@@ -623,8 +356,7 @@ class DashboardPage(QWidget):
         actions.addStretch()
 
         trash_btn = TrashButton()
-        # pass theme so the icon colors match light/dark
-        trash_btn.setProperty("theme", getattr(self.state, "theme", "dark") if self.state else "dark")
+        # Theme property removed - light mode only
         trash_btn.clicked.connect(lambda: self._confirm_delete(lab_name))
         actions.addWidget(trash_btn)
 
