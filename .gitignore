@@ -7,3 +7,8 @@ venv/
 .vscode/
 software_repo/
 
+#after buillding the destop application, the dist folder will be created, so we can ignore it
+dist/
+build/
+*.spec
+
