@@ -504,7 +504,13 @@ class LabPage(QWidget):
         n = len(self.selected_pcs)
         self.next_btn.setEnabled(n > 0)
         self.count_lbl.setText(f"{n} PC(s) selected" if n else "No PCs selected")
+        
+        # Keep state in sync whenever selection changes
+        if self.state:
+            self.state.selected_targets = list(self.selected_pcs)
+            self.state.current_lab = self.current_lab
 
+   
     def _on_lab_changed(self, lab_name: str):
         """Handle lab selection change"""
         if not lab_name or lab_name == "No labs available":
@@ -517,17 +523,20 @@ class LabPage(QWidget):
             return
 
         self.current_lab = lab_name
+        
+        # Sync lab name to state immediately
+        if self.state:
+            self.state.current_lab = lab_name
+        
         self.pcs = self.inventory_manager.get_pcs_for_lab(lab_name) or []
         self.selected_pcs.clear()
         self._render_lab()
-
-        # Update header
         self.lab_subtitle.setText(f"Managing: {lab_name}")
 
     def _edit_lab(self):
-        """Edit current lab"""
-        if self.current_lab:
-            self.edit_lab_requested.emit(self.current_lab)
+            """Edit current lab"""
+            if self.current_lab:
+                self.edit_lab_requested.emit(self.current_lab)
 
     def _confirm_delete_lab(self):
         """Confirm and delete current lab"""
