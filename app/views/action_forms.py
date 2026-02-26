@@ -115,7 +115,7 @@ class WinInstallForm(_BaseForm):
         self.file_input = _field("No file selected…", read_only=True)
         browse_btn = QPushButton("Browse…")
         browse_btn.setObjectName("SecondaryBtn")
-        browse_btn.setFixedWidth(90)
+        browse_btn.setFixedWidth(100)
         browse_btn.clicked.connect(self._browse)
         self._add_row("Installer File  (.exe / .msi)", self.file_input, browse_btn)
 

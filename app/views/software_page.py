@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QApplication, QFileDialog,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPalette, QFont
 
 from views.action_forms import get_form
 from core.ansible_worker import AnsibleWorker
@@ -24,31 +24,7 @@ _STEP_INDEX = {key: i for i, (key, _) in enumerate(_STEPS)}
 
 _ACTIONS = [("install", "Install"), ("remove", "Remove"), ("update", "Update")]
 
-# ── per-theme colour tokens ──────────────────────────────────────────────────
-DARK = {
-    "chrome_bg": "#1a1d27", "chrome_bdr": "#252836",
-    "pill_done": "#1d4ed8", "pill_active": "#3d7aed",
-    "pill_fail": "#dc2626", "pill_idle": "#2a2d3a",
-    "pill_text": "#ffffff", "pill_muted": "#64748b",
-    "line_done": "#3d7aed", "line_idle": "#2a2d3a",
-    "log_bg": "#111318", "log_header": "#141720", "log_border": "#2d3148",
-    "log_text": "#dde3ed", "log_error": "#fca5a5", "log_dim": "#8896a8",
-    "scrollbar": "#2a2d3a", "scroll_hdl": "#3d4460",
-    "btn_idle_bg": "#1a1d27", "btn_idle_bdr": "#252836", "btn_idle_fg": "#94a3b8",
-    "radio_bg": "#1a1d27", "radio_bdr": "#252836", "radio_fg": "#64748b",
-    "radio_chk_bg": "#3d7aed", "radio_chk_fg": "#ffffff",
-    "radio_hov_bdr": "#3d7aed", "radio_hov_fg": "#e2e8f0",
-    "act_idle_bg": "#1a1d27", "act_idle_bdr": "#252836", "act_idle_fg": "#64748b",
-    "act_active_bg": "#3d7aed", "act_active_bdr": "#5aaaff", "act_active_fg": "#ffffff",
-    "div_color": "#252836",
-    "badge_ok_fg": "#86efac", "badge_ok_bg": "#14532d", "badge_ok_bdr": "#166534",
-    "badge_fail_fg": "#fca5a5", "badge_fail_bg": "#7f1d1d", "badge_fail_bdr": "#991b1b",
-    "abar_bg": "#141720", "abar_bdr": "#1e2130",
-    "abar_btn_bg": "#2a2d3a", "abar_btn_bdr": "#252836", "abar_btn_fg": "#e2e8f0",
-    "back_bg": "transparent", "back_bdr": "#252836", "back_fg": "#64748b",
-    "lbl_muted": "#64748b", "lbl_title": "#e2e8f0", "lbl_sub": "#64748b",
-    "vline": "#252836",
-}
+# ── LIGHT MODE ONLY colour tokens ───────────────────────────────────────────
 LIGHT = {
     "chrome_bg": "#ffffff", "chrome_bdr": "#e2e8f0",
     "pill_done": "#1d4ed8", "pill_active": "#2563eb",
@@ -69,21 +45,13 @@ LIGHT = {
     "badge_fail_fg": "#991b1b", "badge_fail_bg": "#fee2e2", "badge_fail_bdr": "#dc2626",
     "abar_bg": "#f1f5f9", "abar_bdr": "#e2e8f0",
     "abar_btn_bg": "#ffffff", "abar_btn_bdr": "#e2e8f0", "abar_btn_fg": "#334155",
-    "back_bg": "transparent", "back_bdr": "#e2e8f0", "back_fg": "#94a3b8",
+    "back_bg": "#ffffff", "back_bdr": "#e2e8f0", "back_fg": "#64748b",
     "lbl_muted": "#64748b", "lbl_title": "#0f172a", "lbl_sub": "#64748b",
     "vline": "#e2e8f0",
 }
 
-
-def _is_dark() -> bool:
-    app = QApplication.instance()
-    if app is None:
-        return True
-    return app.palette().color(QPalette.Window).lightness() < 128
-
-
 def _t() -> dict:
-    return DARK if _is_dark() else LIGHT
+    return LIGHT  # Always return light mode
 
 
 # =============================================================================
@@ -227,49 +195,6 @@ class LogPanel(QWidget):
         self._action_bar.hide()
         self._layout.addWidget(self._action_bar)
 
-    def apply_theme(self):
-        t = _t()
-        self.setStyleSheet(
-            f"background: {t['log_bg']}; border-radius: 8px;"
-            f" border: 1px solid {t['log_border']};"
-        )
-        self._header.setStyleSheet(
-            f"background: {t['log_header']}; border-radius: 8px 8px 0 0;"
-            f" border-bottom: 1px solid {t['log_border']};"
-        )
-        self._title_lbl.setStyleSheet(
-            f"color: {t['lbl_muted']}; font-size: 12px; font-weight: 600;"
-            " letter-spacing: 0.5px; background: transparent; border: none;"
-        )
-        self._scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: transparent; }}"
-            f"QScrollBar:vertical {{ background: {t['scrollbar']}; width: 5px; border-radius: 2px; }}"
-            f"QScrollBar::handle:vertical {{ background: {t['scroll_hdl']}; border-radius: 2px; }}"
-            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
-        )
-        self._action_bar.setStyleSheet(
-            f"background: {t['abar_bg']}; border-radius: 0 0 8px 8px;"
-            f" border-top: 1px solid {t['abar_bdr']};"
-        )
-        btn_style = (
-            f"background: {t['abar_btn_bg']}; border: 1px solid {t['abar_btn_bdr']};"
-            f" color: {t['abar_btn_fg']}; border-radius: 6px; padding: 5px 12px; font-size: 12px;"
-        )
-        for btn in (self.retry_btn, self.new_task_btn, self.export_btn):
-            btn.setStyleSheet(btn_style)
-        for i in range(self._inner_layout.count()):
-            item = self._inner_layout.itemAt(i)
-            if item and item.widget():
-                w = item.widget()
-                is_error = w.property("log_error")
-                colour = t["log_error"] if is_error else (
-                    t["log_dim"] if w.property("log_dim") else t["log_text"]
-                )
-                w.setStyleSheet(
-                    f"color: {colour}; font-family: 'Consolas', 'Courier New', monospace;"
-                    " font-size: 12px; background: transparent; border: none;"
-                )
-
     def clear(self):
         while self._inner_layout.count() > 1:
             item = self._inner_layout.takeAt(0)
@@ -329,14 +254,20 @@ class SoftwarePage(QWidget):
         self.inventory_manager = inventory_manager
         self.state = state
         self._form_cache: dict[tuple[str, str], QWidget] = {}
-        self._worker: AnsibleWorker | None = None   # ← real worker, replaces sim timer
-        self._last_payload: dict | None = None       # ← stored for Retry
+        self._worker: AnsibleWorker | None = None
+        self._last_payload: dict | None = None
         self._build_ui()
 
     # =========================================================================
     # UI construction
     # =========================================================================
     def _build_ui(self):
+        # Set fixed background color for the whole page
+        self.setAutoFillBackground(True)
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor("#f8fafc"))
+        self.setPalette(palette)
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -344,12 +275,13 @@ class SoftwarePage(QWidget):
         # chrome
         self._chrome = QFrame()
         self._chrome.setFixedHeight(112)
+        self._chrome.setAutoFillBackground(True)
         chrome_layout = QVBoxLayout(self._chrome)
         chrome_layout.setContentsMargins(24, 10, 24, 10)
         chrome_layout.setSpacing(6)
         btn_row = QHBoxLayout()
         self.back_btn = QPushButton("← Back")
-        self.back_btn.setFixedWidth(80)
+        self.back_btn.setFixedWidth(90)
         self.back_btn.setObjectName("BackBtn")
         self.back_btn.clicked.connect(self.back_to_lab.emit)
         btn_row.addWidget(self.back_btn)
@@ -361,6 +293,7 @@ class SoftwarePage(QWidget):
 
         # two-panel content
         content_area = QWidget()
+        content_area.setAutoFillBackground(True)
         content_layout = QHBoxLayout(content_area)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
@@ -371,28 +304,32 @@ class SoftwarePage(QWidget):
         self._left_scroll = left_scroll
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setAutoFillBackground(True)
         left_panel = QWidget()
         left_panel.setObjectName("SWFormPanel")
+        left_panel.setAutoFillBackground(True)
         self._left_panel = left_panel
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(36, 28, 36, 28)
         left_layout.setSpacing(20)
 
         self._title_lbl = QLabel("Software Manager")
-        self._title_lbl.setStyleSheet("font-size: 20px; font-weight: 800;")
+        self._title_lbl.setStyleSheet("font-size: 20px; font-weight: 800; color: #0f172a;")
         left_layout.addWidget(self._title_lbl)
 
         self._sub_lbl = QLabel("Configure the action to deploy to selected PCs")
         self._sub_lbl.setObjectName("SubText")
+        self._sub_lbl.setStyleSheet("color: #64748b;")
         left_layout.addWidget(self._sub_lbl)
 
         self._divider = QFrame()
         self._divider.setFrameShape(QFrame.HLine)
+        self._divider.setStyleSheet("color: #e2e8f0; background: #e2e8f0;")
         left_layout.addWidget(self._divider)
 
         os_lbl = QLabel("OPERATING SYSTEM")
         os_lbl.setObjectName("SubText")
-        os_lbl.setStyleSheet("font-size: 10px; font-weight: 700; letter-spacing: 1.2px;")
+        os_lbl.setStyleSheet("color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: 1.2px;")
         left_layout.addWidget(os_lbl)
 
         os_row = QHBoxLayout()
@@ -412,7 +349,7 @@ class SoftwarePage(QWidget):
 
         action_lbl = QLabel("ACTION")
         action_lbl.setObjectName("SubText")
-        action_lbl.setStyleSheet("font-size: 10px; font-weight: 700; letter-spacing: 1.2px;")
+        action_lbl.setStyleSheet("color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: 1.2px;")
         left_layout.addWidget(action_lbl)
 
         action_row = QHBoxLayout()
@@ -432,6 +369,27 @@ class SoftwarePage(QWidget):
         self.execute_btn = QPushButton("Execute →")
         self.execute_btn.setObjectName("PrimaryBtn")
         self.execute_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.execute_btn.setStyleSheet(
+            "QPushButton#PrimaryBtn {"
+            "   background: #2563eb;"
+            "   color: white;"
+            "   border: none;"
+            "   border-radius: 8px;"
+            "   padding: 12px 24px;"
+            "   font-size: 14px;"
+            "   font-weight: 700;"
+            "}"
+            "QPushButton#PrimaryBtn:hover {"
+            "   background: #1d4ed8;"
+            "}"
+            "QPushButton#PrimaryBtn:pressed {"
+            "   background: #1e40af;"
+            "}"
+            "QPushButton#PrimaryBtn:disabled {"
+            "   background: #cbd5e1;"
+            "   color: #64748b;"
+            "}"
+        )
         self.execute_btn.clicked.connect(self._on_execute_clicked)
         left_layout.addWidget(self.execute_btn)
         left_layout.addStretch()
@@ -441,8 +399,10 @@ class SoftwarePage(QWidget):
         self._vline = QFrame()
         self._vline.setFrameShape(QFrame.VLine)
         self._vline.setFixedWidth(1)
+        self._vline.setStyleSheet("color: #e2e8f0; background: #e2e8f0;")
 
         right_wrapper = QWidget()
+        right_wrapper.setAutoFillBackground(True)
         rw_layout = QVBoxLayout(right_wrapper)
         rw_layout.setContentsMargins(0, 20, 20, 20)
         self.log_panel = LogPanel()
@@ -459,7 +419,7 @@ class SoftwarePage(QWidget):
         self.apply_theme()
 
     # =========================================================================
-    # Theme
+    # Theme - LIGHT MODE ONLY
     # =========================================================================
     def apply_theme(self):
         t = _t()
@@ -468,20 +428,19 @@ class SoftwarePage(QWidget):
             f" border-bottom: 1px solid {t['chrome_bdr']}; }}"
         )
         self._left_scroll.setStyleSheet(
+            f"QScrollArea {{ background: {t['log_bg']}; }}"
             f"QScrollBar:vertical {{ background: {t['scrollbar']}; width: 6px; border-radius: 3px; }}"
             f"QScrollBar::handle:vertical {{ background: {t['scroll_hdl']}; border-radius: 3px; }}"
             f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
         )
-        self._divider.setStyleSheet(
-            f"color: {t['div_color']}; background: {t['div_color']};"
-        )
-        self._vline.setStyleSheet(
-            f"color: {t['vline']}; background: {t['vline']};"
-        )
+        self._left_panel.setStyleSheet(f"background: {t['log_bg']};")
         self._apply_radio_style(self._win_radio)
         self._apply_radio_style(self._lin_radio)
         self._refresh_action_btns()
-        self.log_panel.apply_theme()
+        self.log_panel.setStyleSheet(
+            f"background: {t['log_bg']}; border-radius: 8px;"
+            f" border: 1px solid {t['log_border']};"
+        )
         self.progress_bar.update()
 
     def _apply_radio_style(self, rb: QRadioButton):
@@ -574,7 +533,7 @@ class SoftwarePage(QWidget):
             "targets": self.state.selected_targets,
             **form_payload,
         }
-        self._last_payload = payload          # save for Retry
+        self._last_payload = payload
         self.log_panel.clear()
         self._run_ansible(payload)
 
@@ -590,39 +549,20 @@ class SoftwarePage(QWidget):
     def _run_ansible(self, payload: dict):
         """
         Builds the exact Docker command your README documents, using sync-ansible:latest.
-
-        Windows install:
-          docker run --rm
-            -v $PWD:/app  -v ~/.ssh:/root/.ssh:ro
-            -w /app/ansible  sync-ansible:latest
-            ansible-playbook -i inventory/hosts.ini playbooks/master_deploy_v2.yml
-            -e "target_host=windows_clients file_name=X app_state=present"
-
-        Linux install/remove/update: same but adds --vault-password-file=/vault_pass
-        and mounts ~/.ansible_vault_pass.
-
-        The playbook var  target_host  tells Ansible which group to run against.
-        For targeted IPs we write a temporary inventory file so the user's
-        selection (not the whole group) is used.
         """
-        os_name = payload.get("os", self.state.target_os)   # "windows" | "linux"
-        action  = payload.get("action", self.state.action)  # "install" | "remove" | "update"
+        os_name = payload.get("os", self.state.target_os)
+        action  = payload.get("action", self.state.action)
         targets = payload.get("targets", self.state.selected_targets)
 
-        # ── locate project root  (app/views/ → ../../) ──────────────────────
         here         = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(here, "..", ".."))
         ssh_dir      = os.path.expanduser("~/.ssh")
         vault_pass   = os.path.expanduser("~/.ansible_vault_pass")
         sw_repo      = os.path.join(project_root, "software_repo")
 
-        # ── map action → Ansible app_state ──────────────────────────────────
         app_state_map = {"install": "present", "remove": "absent", "update": "latest"}
         app_state = app_state_map.get(action, "present")
 
-        # ── build extra-vars ─────────────────────────────────────────────────
-        # target_host is the Ansible group; we ALSO pass a per-run temp inventory
-        # so only the user-selected IPs are targeted.
         target_host = "windows_clients" if os_name == "windows" else "linux_clients"
         extra: dict[str, str] = {
             "app_state":   app_state,
@@ -637,7 +577,6 @@ class SoftwarePage(QWidget):
                 return
             file_name = os.path.basename(file_path)
             extra["file_name"] = file_name
-            # Copy installer into software_repo so Docker can reach it
             self._ensure_in_repo(file_path, sw_repo)
             if payload.get("args", "").strip():
                 extra["custom_install_args"] = payload["args"].strip()
@@ -666,11 +605,6 @@ class SoftwarePage(QWidget):
                 return
             extra["package_name"] = pkgs
 
-        # update needs no extra vars beyond app_state / target_host
-
-        # ── write a temporary inventory for the selected IPs only ────────────
-        # This lives inside the project's ansible/inventory/ folder so Docker
-        # can see it via the -v $PWD:/app mount.
         tmp_inv = self._write_temp_inventory(
             project_root, targets, os_name, target_host
         )
@@ -679,16 +613,13 @@ class SoftwarePage(QWidget):
             self._on_execution_finished(ok=False)
             return
 
-        # Inventory path relative to /app/ansible (the Docker workdir)
         inv_rel = os.path.relpath(
             tmp_inv,
             os.path.join(project_root, "ansible")
         )
 
-        # ── serialise extra-vars string ──────────────────────────────────────
         ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
 
-        # ── log header ───────────────────────────────────────────────────────
         self.log_panel.append_line(
             f"▶ ansible-playbook  [{action.upper()} / {os_name.upper()}]"
             f"  →  {len(targets)} host(s)", "dim"
@@ -697,32 +628,15 @@ class SoftwarePage(QWidget):
         self.log_panel.append_line(f"  Vars  : {ev_str}", "dim")
         self.log_panel.append_line("", "dim")
 
-        # ── build Docker command (mirrors README exactly) ────────────────────
-        #
-        # docker run --rm
-        #   -v "$PWD:/app"
-        #   -v "$HOME/.ssh:/root/.ssh:ro"
-        #   [-v "$HOME/.ansible_vault_pass:/vault_pass:ro"]   # linux only
-        #   -v "software_repo:/app/software_repo"             # windows install only
-        #   -w /app/ansible
-        #   sync-ansible:latest
-        #   ansible-playbook
-        #     -i <inv_rel>
-        #     playbooks/master_deploy.yml
-        #     -e "<ev_str>"
-        #     [--vault-password-file=/vault_pass]             # linux only
-        #
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{project_root}:/app",
             "-v", f"{ssh_dir}:/root/.ssh:ro",
         ]
 
-        # Mount software_repo for Windows installs so the playbook can copy the file
         if action == "install" and os_name == "windows":
             cmd += ["-v", f"{sw_repo}:/app/software_repo"]
 
-        # Mount vault password for Linux targets
         if os_name == "linux" and os.path.exists(vault_pass):
             cmd += ["-v", f"{vault_pass}:/vault_pass:ro"]
 
@@ -738,7 +652,6 @@ class SoftwarePage(QWidget):
         if os_name == "linux" and os.path.exists(vault_pass):
             cmd += ["--vault-password-file=/vault_pass"]
 
-        # ── launch worker ────────────────────────────────────────────────────
         if self._worker and self._worker.isRunning():
             self.log_panel.append_line(
                 "⚠ A task is already running. Wait for it to finish.", "error"
@@ -752,7 +665,6 @@ class SoftwarePage(QWidget):
         )
         self._worker.start()
 
-    # ── helpers ──────────────────────────────────────────────────────────────
     @staticmethod
     def _write_temp_inventory(
         project_root: str,
@@ -760,21 +672,13 @@ class SoftwarePage(QWidget):
         os_name: str,
         group: str,
     ) -> str | None:
-        """
-        Write a minimal INI inventory containing only the selected IPs.
-        Copies connection vars from the real hosts.ini so SSH / vault settings
-        are preserved, then adds the selected IPs under the right group.
-
-        Returns the absolute path to the temp file, or None on error.
-        """
-        import shutil, tempfile, configparser
+        import os
 
         ansible_dir  = os.path.join(project_root, "ansible")
         real_inv     = os.path.join(ansible_dir, "inventory", "hosts.ini")
         tmp_dir      = os.path.join(ansible_dir, "inventory")
         tmp_path     = os.path.join(tmp_dir, "_sync_tmp_inventory.ini")
 
-        # Read the real inventory for [group:vars] section
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
             with open(real_inv, "r") as f:
@@ -806,7 +710,6 @@ class SoftwarePage(QWidget):
 
     @staticmethod
     def _ensure_in_repo(src_path: str, repo_dir: str):
-        """Copy installer into software_repo if it isn't already there."""
         import shutil
         os.makedirs(repo_dir, exist_ok=True)
         dst = os.path.join(repo_dir, os.path.basename(src_path))
@@ -817,20 +720,15 @@ class SoftwarePage(QWidget):
                 print(f"[SoftwarePage] Could not copy installer to repo: {e}")
 
     def _on_ansible_line(self, line: str):
-        """Classify each output line and forward to log panel."""
         low = line.lower()
-        # Ansible fatal / error → red
         if any(kw in low for kw in ("fatal:", "error", "failed!", "unreachable")):
             self.log_panel.append_line(line, "error")
-        # Blank / separator → dim
         elif line.strip() == "" or line.strip().startswith("*"):
             self.log_panel.append_line(line, "dim")
         else:
             self.log_panel.append_line(line, "normal")
 
     def _on_execution_finished(self, ok: bool, tmp_inv: str | None = None):
-        """Called by AnsibleWorker.finished signal."""
-        # Clean up temporary inventory file
         if tmp_inv and os.path.exists(tmp_inv):
             try:
                 os.remove(tmp_inv)
@@ -842,9 +740,6 @@ class SoftwarePage(QWidget):
         self.execute_btn.setText("Execute →")
         self._worker = None
 
-    # =========================================================================
-    # Log action bar
-    # =========================================================================
     def _on_retry(self):
         if self._last_payload is None:
             return
@@ -882,9 +777,6 @@ class SoftwarePage(QWidget):
         except OSError as e:
             self.log_panel.append_line(f"Export failed: {e}", "error")
 
-    # =========================================================================
-    # Lifecycle
-    # =========================================================================
     def on_page_show(self):
         key = self._current_key()
         if key in self._form_cache:
@@ -920,6 +812,7 @@ class _NoForm(QWidget):
         lbl = QLabel(f'No form defined for "{os_name} / {action}".')
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setObjectName("SubText")
+        lbl.setStyleSheet("color: #64748b;")
         QVBoxLayout(self).addWidget(lbl)
 
     def submit(self):
