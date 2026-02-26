@@ -4,11 +4,13 @@ import ipaddress
 from dataclasses import dataclass
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QSizePolicy, QLineEdit, QSpinBox
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
+    QSizePolicy, QLineEdit, QSpinBox, QApplication
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint
-from PySide6.QtGui import QPainter, QColor, QPen, QFont, QMouseEvent, QEnterEvent
+from PySide6.QtCore import Qt, QTimer, QEvent
+from PySide6.QtGui import QPainter, QColor, QPen, QMouseEvent
+
+from .dialog_base import BaseDialog, CloseButton
 
 
 @dataclass
@@ -18,234 +20,259 @@ class CreateLabResult:
     ips: list[str]
 
 
-class CloseButton(QPushButton):
-    """Custom close button with red hover effect"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(32, 32)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setFocusPolicy(Qt.NoFocus)
-        self._hovered = False
-        
-    def enterEvent(self, event: QEnterEvent):
-        self._hovered = True
-        self.update()
-        super().enterEvent(event)
-        
-    def leaveEvent(self, event):
-        self._hovered = False
-        self.update()
-        super().leaveEvent(event)
-        
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Background circle
-        if self._hovered:
-            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
-        else:
-            painter.setBrush(Qt.transparent)
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(4, 4, 24, 24)
-        
-        # X mark
-        if self._hovered:
-            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
-        else:
-            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
-        margin = 11
-        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
-        painter.drawLine(32 - margin, margin, margin, 32 - margin)
-
-
-class CreateLabDialog(QDialog):
+class CreateLabDialog(BaseDialog):
     """
-    Create Lab dialog (Delete-dialog-like):
-    - Frameless + translucent background
-    - Rounded card container
-    - Custom icon (drawn)
-    - Title + subtitle
-    - Layout chips (Sections/Rows/Cols)
-    - IP Range is TYPEABLE (start + end)
-    - Live validation + warning pill
-    - Fade-in animation
-    - Movable by dragging
-    - Close button in top-right corner with red hover effect
-
-    NOTE: Functionality is unchanged (get_data structure, validation rules, etc.)
+    Create Lab dialog — matches glass_messagebox light theme.
+    All functionality (get_data, validation, layout chips) unchanged.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("CreateLabDialog")
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setModal(True)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setFixedWidth(620)
 
-        self._result: CreateLabResult | None = None
+        # Override any problematic attributes
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+
+        # Ensure the dialog can receive focus and pass it to children
+        self.setFocusPolicy(Qt.StrongFocus)
         
-        # For window dragging
-        self._drag_position: QPoint | None = None
+        self._result: CreateLabResult | None = None
 
         self._build_ui()
+        self._finish_init()
         self._wire_signals()
-        self._animate_in()
         self._validate_live()
+        
+        # Set focus to the first input field after dialog is shown
+        QTimer.singleShot(150, self._set_initial_focus)
 
-    # ---------------- Window Dragging ----------------
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
-            self._drag_position = event.globalPosition().toPoint()
+    def _set_initial_focus(self):
+        """Set initial focus to the lab name input field"""
+        if self.lab_name:
+            self.lab_name.setFocus()
+            self.lab_name.setFocusPolicy(Qt.StrongFocus)
+            # Force the widget to be focusable
+            self.lab_name.setEnabled(True)
+            self.lab_name.setVisible(True)
+            
+    def eventFilter(self, obj, event):
+        """Filter events to ensure focus works properly"""
+        if event.type() == QEvent.MouseButtonPress:
+            # Make sure clicks on the dialog background don't steal focus
+            if obj is self:
+                # Find the child widget under the mouse and give it focus
+                child = self.childAt(self.mapFromGlobal(event.globalPos()))
+                if child and hasattr(child, 'setFocus'):
+                    child.setFocus()
+                    return True
+        return super().eventFilter(obj, event)
 
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if self._drag_position is not None:
-            delta = event.globalPosition().toPoint() - self._drag_position
-            self.move(self.pos() + delta)
-            self._drag_position = event.globalPosition().toPoint()
+    def showEvent(self, event):
+        """Handle show event to ensure proper focus setup"""
+        super().showEvent(event)
+        # Install event filter to handle focus properly
+        QApplication.instance().installEventFilter(self)
+        # Ensure the dialog is raised and focused
+        self.raise_()
+        self.activateWindow()
+        QTimer.singleShot(100, self._set_initial_focus)
 
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
-            self._drag_position = None
-
-    # ---------------- UI ----------------
     def _build_ui(self):
+        self.setStyleSheet(self.BASE_QSS + """
+            QLabel#CreateLabSubtitle {
+                font-size: 11px;
+                color: #64748b;
+            }
+            QLabel#CreateLabRowLabel {
+                font-size: 11px;
+                font-weight: 600;
+                color: #64748b;
+                letter-spacing: 0.4px;
+            }
+            QLabel#CreateLabDash {
+                color: #94a3b8;
+                font-size: 16px;
+                background: transparent;
+            }
+            QFrame#CreateLabChip {
+                background: #f4f6f9;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+            QLabel#CreateLabChipLabel {
+                font-size: 12px;
+                font-weight: 600;
+                color: #475569;
+                background: transparent;
+            }
+            QSpinBox#CreateLabSpin {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                color: #0f172a;
+                font-size: 13px;
+                font-weight: 700;
+                padding: 2px 4px;
+                min-height: 28px;
+            }
+            QSpinBox#CreateLabSpin:focus {
+                border: 1px solid #2563eb;
+            }
+            QFrame#CreateLabWarning {
+                background: #fffbeb;
+                border: 1px solid #fcd34d;
+                border-radius: 8px;
+            }
+            QLabel#CreateLabWarningText {
+                color: #92400e;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            QLabel#CreateLabWarningIcon {
+                background: transparent;
+                font-size: 13px;
+            }
+            /* Ensure input fields are properly styled and focusable */
+            QLineEdit#CreateLabInput {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 0 12px;
+                color: #0f172a;
+                font-size: 13px;
+                selection-background-color: #bfdbfe;
+            }
+            QLineEdit#CreateLabInput:focus {
+                border: 1px solid #2563eb;
+                background: #ffffff;
+            }
+            QLineEdit#CreateLabInput:hover {
+                border: 1px solid #94a3b8;
+            }
+        """)
+
         root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(0)
 
-        card = QFrame(self)
-        card.setObjectName("CreateLabCard")
-        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # ── Header ────────────────────────────────────────────
+        hdr = QHBoxLayout()
+        hdr.setSpacing(12)
 
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(24, 22, 24, 18)
-        layout.setSpacing(16)
-
-        # --- Header row (icon + title/subtitle + close button) ---
-        header = QHBoxLayout()
-        header.setSpacing(16)
-
-        icon_container = QFrame()
-        icon_container.setObjectName("CreateLabIconContainer")
-        icon_container.setFixedSize(48, 48)
-
-        class PlusIcon(QLabel):
+        class PlusIconWidget(QLabel):
             def paintEvent(self, event):
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.Antialiasing)
-
-                # Background circle (theme handled by QSS via container; keep subtle here)
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor(59, 130, 246, 40))
+                painter.setBrush(QColor(37, 99, 235, 35))
                 painter.drawEllipse(4, 4, 40, 40)
-
-                # Plus sign
-                painter.setPen(QPen(QColor(59, 130, 246), 2.2))
+                painter.setPen(QPen(QColor(37, 99, 235), 2.2))
                 cx, cy = 24, 24
-                painter.drawLine(cx, cy - 8, cx, cy + 8)
-                painter.drawLine(cx - 8, cy, cx + 8, cy)
+                painter.drawLine(cx, cy - 9, cx, cy + 9)
+                painter.drawLine(cx - 9, cy, cx + 9, cy)
+                if not self.rect().isValid():
+                    return
+                super().paintEvent(event)
 
-        icon_label = PlusIcon()
-        icon_label.setFixedSize(48, 48)
-
-        icon_lay = QVBoxLayout(icon_container)
-        icon_lay.setContentsMargins(0, 0, 0, 0)
-        icon_lay.addWidget(icon_label, 0, Qt.AlignCenter)
-
-        header.addWidget(icon_container)
+        icon_widget = PlusIconWidget()
+        icon_widget.setFixedSize(48, 48)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(6)
+        title_col.setSpacing(3)
 
         title = QLabel("Create New Laboratory")
-        title.setObjectName("CreateLabTitle")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setObjectName("DialogTitle")
 
         subtitle = QLabel("Set layout and enter an IP range for workstation generation.")
         subtitle.setObjectName("CreateLabSubtitle")
         subtitle.setWordWrap(True)
-        subtitle.setFont(QFont("Segoe UI", 12))
 
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        header.addLayout(title_col, 1)
-        
-        # Close button - using updated CloseButton class with red hover
         self.close_btn = CloseButton()
-        self.close_btn.setObjectName("CreateLabCloseBtn")
-        
-        header.addWidget(self.close_btn)
-        
-        layout.addLayout(header)
+        self.close_btn.setObjectName("CloseBtn")
 
-        # Divider
-        divider = QFrame()
-        divider.setObjectName("CreateLabDivider")
-        divider.setFixedHeight(2)
-        layout.addWidget(divider)
+        hdr.addWidget(icon_widget)
+        hdr.addLayout(title_col, 1)
+        hdr.addWidget(self.close_btn)
+        root.addLayout(hdr)
 
-        # ---- Form ----
+        root.addSpacing(14)
+        root.addWidget(self._divider())
+        root.addSpacing(14)
+
+        # ── Form ──────────────────────────────────────────────
         form = QVBoxLayout()
-        form.setSpacing(12)
+        form.setSpacing(10)
 
-        # Lab Name
         form.addWidget(self._row_label("Lab Name", "CreateLabRowLabel"))
         self.lab_name = QLineEdit()
         self.lab_name.setObjectName("CreateLabInput")
         self.lab_name.setPlaceholderText("e.g. CSL 1 & 2")
+        self.lab_name.setFixedHeight(38)
+        self.lab_name.setFocusPolicy(Qt.StrongFocus)
+        self.lab_name.setAttribute(Qt.WA_MacShowFocusRect, True)  # For macOS
         form.addWidget(self.lab_name)
 
-        # Layout
+        form.addSpacing(4)
         form.addWidget(self._row_label("Layout", "CreateLabRowLabel"))
+
         chips_row = QHBoxLayout()
         chips_row.setSpacing(10)
-
         self.sections = self._chip_spin("Sections", 1, 50, 3)
-        self.rows = self._chip_spin("Rows", 1, 50, 7)
-        self.cols = self._chip_spin("Cols", 1, 50, 5)
-
+        self.rows     = self._chip_spin("Rows",     1, 50, 7)
+        self.cols     = self._chip_spin("Cols",     1, 50, 5)
         chips_row.addWidget(self.sections.container)
         chips_row.addWidget(self.rows.container)
         chips_row.addWidget(self.cols.container)
         form.addLayout(chips_row)
 
-        # IP Range (TYPEABLE)
+        form.addSpacing(4)
         form.addWidget(self._row_label("IP Range", "CreateLabRowLabel"))
+
         ip_row = QHBoxLayout()
-        ip_row.setSpacing(10)
+        ip_row.setSpacing(8)
 
         self.ip_start = QLineEdit()
         self.ip_start.setObjectName("CreateLabInput")
-        self.ip_start.setPlaceholderText("Start IP (e.g. 192.168.10.1)")
+        self.ip_start.setPlaceholderText("Start IP  (e.g. 192.168.10.1)")
+        self.ip_start.setFixedHeight(38)
+        self.ip_start.setFocusPolicy(Qt.StrongFocus)
+        self.ip_start.setAttribute(Qt.WA_MacShowFocusRect, True)
 
         dash = QLabel("—")
         dash.setObjectName("CreateLabDash")
         dash.setAlignment(Qt.AlignCenter)
-        dash.setFixedWidth(18)
+        dash.setFixedWidth(20)
 
         self.ip_end = QLineEdit()
         self.ip_end.setObjectName("CreateLabInput")
-        self.ip_end.setPlaceholderText("End IP (e.g. 192.168.10.99)")
+        self.ip_end.setPlaceholderText("End IP  (e.g. 192.168.10.99)")
+        self.ip_end.setFixedHeight(38)
+        self.ip_end.setFocusPolicy(Qt.StrongFocus)
+        self.ip_end.setAttribute(Qt.WA_MacShowFocusRect, True)
 
         ip_row.addWidget(self.ip_start, 1)
         ip_row.addWidget(dash)
         ip_row.addWidget(self.ip_end, 1)
         form.addLayout(ip_row)
 
-        layout.addLayout(form)
+        root.addLayout(form)
+        root.addSpacing(12)
 
-        # ---- Warning pill (same vibe as delete) ----
+        # ── Warning pill ──────────────────────────────────────
         self.warn = QFrame()
         self.warn.setObjectName("CreateLabWarning")
         wlay = QHBoxLayout(self.warn)
         wlay.setContentsMargins(12, 10, 12, 10)
-        wlay.setSpacing(10)
+        wlay.setSpacing(8)
 
         self.warn_icon = QLabel("⚠️")
         self.warn_icon.setObjectName("CreateLabWarningIcon")
-        self.warn_icon.setFixedWidth(24)
+        self.warn_icon.setFixedWidth(20)
         self.warn_icon.setAlignment(Qt.AlignCenter)
 
         self.warn_text = QLabel("")
@@ -254,34 +281,39 @@ class CreateLabDialog(QDialog):
 
         wlay.addWidget(self.warn_icon)
         wlay.addWidget(self.warn_text, 1)
+        root.addWidget(self.warn)
 
-        layout.addWidget(self.warn)
+        root.addSpacing(12)
+        root.addWidget(self._divider())
+        root.addSpacing(12)
 
-        # ---- Buttons ----
+        # ── Buttons ───────────────────────────────────────────
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
+        btn_row.setSpacing(10)
         btn_row.addStretch()
 
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setObjectName("CreateLabCancelBtn")
+        self.cancel_btn.setObjectName("CancelBtn")
         self.cancel_btn.setCursor(Qt.PointingHandCursor)
-        self.cancel_btn.setFixedHeight(42)
+        self.cancel_btn.setFixedHeight(36)
         self.cancel_btn.setFixedWidth(110)
 
         self.create_btn = QPushButton("Create Lab")
-        self.create_btn.setObjectName("CreateLabCreateBtn")
+        self.create_btn.setObjectName("PrimaryBtn")
         self.create_btn.setCursor(Qt.PointingHandCursor)
-        self.create_btn.setFixedHeight(42)
-        self.create_btn.setFixedWidth(150)
+        self.create_btn.setFixedHeight(36)
+        self.create_btn.setFixedWidth(130)
 
         btn_row.addWidget(self.cancel_btn)
         btn_row.addWidget(self.create_btn)
-        layout.addLayout(btn_row)
+        root.addLayout(btn_row)
 
-        root.addWidget(card)
-
-        # Similar footprint to delete dialog (but slightly wider for 2 IP inputs)
-        self.setFixedWidth(640)
+    def resizeEvent(self, event):
+        """Handle resize events safely"""
+        super().resizeEvent(event)
+        # Ensure the new size is valid
+        if event.size().isValid():
+            self.update()
 
     def _row_label(self, text: str, obj: str) -> QLabel:
         lbl = QLabel(text)
@@ -294,7 +326,7 @@ class CreateLabDialog(QDialog):
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         lay = QHBoxLayout(container)
-        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(10)
 
         cap = QLabel(caption)
@@ -305,8 +337,10 @@ class CreateLabDialog(QDialog):
         sp.setRange(mn, mx)
         sp.setValue(value)
         sp.setButtonSymbols(QSpinBox.NoButtons)
-        sp.setFixedWidth(60)
+        sp.setFixedWidth(56)
         sp.setAlignment(Qt.AlignCenter)
+        sp.setFocusPolicy(Qt.StrongFocus)
+        sp.setAttribute(Qt.WA_MacShowFocusRect, True)
 
         lay.addWidget(cap)
         lay.addStretch()
@@ -319,16 +353,14 @@ class CreateLabDialog(QDialog):
         self.close_btn.clicked.connect(self.reject)
         self.cancel_btn.clicked.connect(self.reject)
         self.create_btn.clicked.connect(self._on_create)
-
         self.lab_name.textChanged.connect(self._validate_live)
         self.ip_start.textChanged.connect(self._validate_live)
         self.ip_end.textChanged.connect(self._validate_live)
-
         self.sections.spin.valueChanged.connect(self._validate_live)
         self.rows.spin.valueChanged.connect(self._validate_live)
         self.cols.spin.valueChanged.connect(self._validate_live)
 
-    # ---------------- Validation / Data ----------------
+    # ── Unchanged validation / data ───────────────────────────
     def _required_count(self) -> int:
         return self.sections.spin.value() * self.rows.spin.value() * self.cols.spin.value()
 
@@ -348,46 +380,36 @@ class CreateLabDialog(QDialog):
             return None
         if s.version != e.version:
             return None
-
         if int(s) > int(e):
             s, e = e, s
-
-        # safety
-        max_generate = 5000
         total = int(e) - int(s) + 1
-        if total > max_generate:
-            return []  # signal too big
+        if total > 5000:
+            return []
         return [str(ipaddress.ip_address(int(s) + i)) for i in range(total)]
 
     def _validate_live(self):
-        need = self._required_count()
-
+        need    = self._required_count()
         name_ok = bool(self.lab_name.text().strip())
-
         ip_list = self._ip_range_list()
-        too_big = (ip_list == [])
-        if too_big:
+
+        if ip_list == []:
             self.warn.show()
             self.warn_text.setText("IP range is too large. Please use a smaller range (max 5000 IPs).")
             self.create_btn.setEnabled(False)
             return
-
         if not name_ok:
             self.warn.show()
             self.warn_text.setText("Please enter a lab name.")
             self.create_btn.setEnabled(False)
             return
-
         if ip_list is None:
             self.warn.show()
             self.warn_text.setText("Enter a valid start and end IP address.")
             self.create_btn.setEnabled(False)
             return
-
-        have = len(ip_list)
-        if have < need:
+        if len(ip_list) < need:
             self.warn.show()
-            self.warn_text.setText(f"Not enough IPs. Need {need}, but range gives {have}.")
+            self.warn_text.setText(f"Not enough IPs. Need {need}, but range gives {len(ip_list)}.")
             self.create_btn.setEnabled(False)
             return
 
@@ -398,36 +420,24 @@ class CreateLabDialog(QDialog):
         self._validate_live()
         if not self.create_btn.isEnabled():
             return
-
         ips_full = self._ip_range_list() or []
-        need = self._required_count()
-
+        need     = self._required_count()
         self._result = CreateLabResult(
             lab_name=self.lab_name.text().strip(),
             layout={
                 "sections": self.sections.spin.value(),
-                "rows": self.rows.spin.value(),
-                "cols": self.cols.spin.value(),
+                "rows":     self.rows.spin.value(),
+                "cols":     self.cols.spin.value(),
             },
             ips=ips_full[:need],
         )
-        self.accept()
+        self._dismiss(accepted=True)
 
     def get_data(self) -> dict:
         if not self._result:
             return {"lab_name": "", "layout": {"sections": 1, "rows": 1, "cols": 1}, "ips": []}
         return {
             "lab_name": self._result.lab_name,
-            "layout": self._result.layout,
-            "ips": self._result.ips,
+            "layout":   self._result.layout,
+            "ips":      self._result.ips,
         }
-
-    # ---------------- Anim ----------------
-    def _animate_in(self):
-        self.setWindowOpacity(0.0)
-        self._fade = QPropertyAnimation(self, b"windowOpacity")
-        self._fade.setDuration(180)
-        self._fade.setStartValue(0.0)
-        self._fade.setEndValue(1.0)
-        self._fade.setEasingCurve(QEasingCurve.OutCubic)
-        self._fade.start()

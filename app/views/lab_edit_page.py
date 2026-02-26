@@ -66,10 +66,6 @@ class LabComboDelegate(QStyledItemDelegate):
 
 
 class LabComboBox(QComboBox):
-    # Remove signals since we're removing edit/delete functionality
-    # edit_requested = Signal(str)
-    # delete_requested = Signal(str)
-
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -100,11 +96,6 @@ class LabComboBox(QComboBox):
                 color: #2563eb;
             }
         """)
-
-        # Remove event filter since we don't need to handle icon clicks
-        # self._view.viewport().installEventFilter(self)
-
-    # Remove eventFilter method since we don't need it
 
 
 class LabEditPage(QWidget):
@@ -152,16 +143,13 @@ class LabEditPage(QWidget):
 
         header.addStretch()
 
-        # Lab selector - SIMPLIFIED (no edit/delete icons)
+        # Lab selector
         self.lab_combo = LabComboBox()
         self.lab_combo.setObjectName("LabSelector")
         self.lab_combo.setCursor(Qt.PointingHandCursor)
         self.lab_combo.setMinimumWidth(220)
         self.lab_combo.setFixedHeight(38)
         self.lab_combo.currentTextChanged.connect(self._on_lab_changed)
-        # Remove connections to edit/delete signals
-        # self.lab_combo.edit_requested.connect(self._edit_lab_from_popup)
-        # self.lab_combo.delete_requested.connect(self._delete_lab_from_popup)
         header.addWidget(self.lab_combo)
 
         main_layout.addLayout(header)
@@ -200,7 +188,7 @@ class LabEditPage(QWidget):
         footer_layout.setContentsMargins(16, 12, 16, 12)
         footer_layout.setSpacing(16)
 
-        # Left side - Action buttons (like in Lab page)
+        # Left side - Action buttons
         actions = QHBoxLayout()
         actions.setSpacing(8)
 
@@ -235,13 +223,13 @@ class LabEditPage(QWidget):
         actions.addStretch()
         footer_layout.addLayout(actions, 2)
 
-        # Center - PC count (like in Lab page)
+        # Center - PC count
         self.pc_count_lbl = QLabel("0 PCs")
         self.pc_count_lbl.setObjectName("PCCountFooter")
         self.pc_count_lbl.setAlignment(Qt.AlignCenter)
         footer_layout.addWidget(self.pc_count_lbl, 1)
 
-        # Right side - Lab info (replacing Next button)
+        # Right side - Lab info
         right_info = QHBoxLayout()
         right_info.setSpacing(8)
 
@@ -283,7 +271,7 @@ class LabEditPage(QWidget):
                 background: transparent;
             }
             
-            /* Footer Bar - matching Lab page */
+            /* Footer Bar */
             QFrame#FooterBar {
                 background-color: #ffffff;
                 border: 1px solid #e2e8f0;
@@ -306,7 +294,7 @@ class LabEditPage(QWidget):
                 border-radius: 20px;
             }
             
-            /* Action Buttons - matching Lab page style */
+            /* Action Buttons */
             QPushButton#ActionButton {
                 background-color: #ffffff;
                 border: 1px solid #e2e8f0;
@@ -324,7 +312,7 @@ class LabEditPage(QWidget):
                 background-color: #f1f5f9;
             }
             
-            /* Delete Button - special red styling */
+            /* Delete Button */
             QPushButton#DeleteButton {
                 background-color: #ffffff;
                 border: 1px solid #ef4444;
@@ -360,7 +348,7 @@ class LabEditPage(QWidget):
                 background-color: #f1f5f9;
             }
             
-            /* Lab Selector - SIMPLIFIED like Lab page */
+            /* Lab Selector */
             QComboBox#LabSelector {
                 background-color: #ffffff;
                 border: 1px solid #2563eb;
@@ -422,9 +410,6 @@ class LabEditPage(QWidget):
         if getattr(self.state, "current_lab", "") == lab:
             return
         self.load_lab(lab)
-
-    # Remove _edit_lab_from_popup and _delete_lab_from_popup methods
-    # since they're no longer needed
 
     def _clear_sections(self):
         for frame in self.part_frames:
@@ -698,15 +683,51 @@ class LabEditPage(QWidget):
             show_glass_message(self, "Bulk Assign Failed", "Invalid IP address format.", icon=QMessageBox.Warning)
             return
 
-        ok = self.inventory_manager.bulk_assign_ips(self.state.current_lab, start_ip)
-        if not ok:
-            show_glass_message(self, "Bulk Assign Failed", "Invalid IP or conflict.", icon=QMessageBox.Warning)
+        # Get all PCs in the lab
+        pcs = self.inventory_manager.get_pcs_for_lab(self.state.current_lab)
+        if not pcs:
+            show_glass_message(self, "Bulk Assign Failed", "No PCs in this lab.", icon=QMessageBox.Warning)
             return
 
-        self.state.selected_targets.clear()
-        self.load_lab(self.state.current_lab)
-
-        show_glass_message(self, "Success", "IP addresses assigned successfully.", icon=QMessageBox.Information)
+        # Sort PCs by section, row, col to maintain consistent ordering
+        sorted_pcs = sorted(pcs, key=lambda x: (x.get('section', 1), x.get('row', 1), x.get('col', 1)))
+        
+        # Parse start IP
+        try:
+            import ipaddress
+            start = ipaddress.ip_address(start_ip)
+            
+            # Update each PC with sequential IP
+            success_count = 0
+            for i, pc in enumerate(sorted_pcs):
+                new_ip = str(ipaddress.ip_address(int(start) + i))
+                # Check if IP is already used by another PC in the lab
+                ip_exists = False
+                for other_pc in pcs:
+                    if other_pc.get('ip') == new_ip and other_pc.get('ip') != pc.get('ip'):
+                        ip_exists = True
+                        break
+                
+                if ip_exists:
+                    show_glass_message(self, "Bulk Assign Failed", f"IP {new_ip} already exists in this lab.", 
+                                      icon=QMessageBox.Warning)
+                    return
+                
+                success = self.inventory_manager.update_pc_ip(self.state.current_lab, pc.get('ip'), new_ip)
+                if success:
+                    success_count += 1
+                    
+            if success_count == len(sorted_pcs):
+                self.state.selected_targets.clear()
+                self.load_lab(self.state.current_lab)
+                show_glass_message(self, "Success", f"IP addresses assigned successfully to {success_count} PCs.", 
+                                  icon=QMessageBox.Information)
+            else:
+                show_glass_message(self, "Partial Success", f"Updated {success_count} of {len(sorted_pcs)} PCs.", 
+                                  icon=QMessageBox.Warning)
+                
+        except Exception as e:
+            show_glass_message(self, "Bulk Assign Failed", f"Error: {str(e)}", icon=QMessageBox.Warning)
 
     # -------- Edit IP --------
     def _edit_ip(self):
@@ -730,6 +751,14 @@ class LabEditPage(QWidget):
         if not self._is_valid_ip(new_ip):
             show_glass_message(self, "IP Error", "Invalid IP address format.", icon=QMessageBox.Warning)
             return
+
+        # Check if new IP is already used
+        pcs = self.inventory_manager.get_pcs_for_lab(self.state.current_lab)
+        for pc in pcs:
+            if pc.get('ip') == new_ip and pc.get('ip') != ip:
+                show_glass_message(self, "IP Error", f"IP {new_ip} already exists in this lab.", 
+                                  icon=QMessageBox.Warning)
+                return
 
         if self.inventory_manager.update_pc_ip(self.state.current_lab, ip, new_ip):
             self.state.selected_targets.clear()

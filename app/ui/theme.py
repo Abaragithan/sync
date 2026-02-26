@@ -857,6 +857,236 @@ QPushButton#BulkIpApplyBtn:pressed {
     border: 1px solid rgba(30, 64, 175, 1.0);
 }
 
+
+/* Page background */
+QWidget#DashboardPage {
+    background: #f4f6f9;
+}
+
+/* ── Header bar ──────────────────────────────── */
+QFrame#HeaderBar {
+    background: #ffffff;
+    border: none;
+}
+
+QFrame#HeaderDivider {
+    background: #e5e8ed;
+    border: none;
+    min-height: 1px;
+    max-height: 1px;
+}
+
+QLabel#Brand {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f1117;
+}
+
+/* ── Scroll area ─────────────────────────────── */
+QScrollArea#DashboardScroll {
+    border: none;
+    background: #f4f6f9;
+}
+
+QWidget#DashboardScrollWidget,
+QWidget#GridContainer {
+    background: #f4f6f9;
+}
+
+/* ── Section label ───────────────────────────── */
+QLabel#SectionLabel {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9ba4b5;
+    letter-spacing: 1px;
+}
+
+/* ── Lab card ────────────────────────────────── */
+QFrame#LabCard {
+    background: #ffffff;
+    border: 1px solid #e8eaef;
+    border-radius: 12px;
+}
+
+QLabel#CardDot {
+    color: #3584e4;
+    font-size: 9px;
+}
+
+QLabel#LabName {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f1117;
+}
+
+QFrame#CardSep {
+    background: #f0f2f5;
+    border: none;
+    min-height: 1px;
+    max-height: 1px;
+}
+
+/* ── Info rows ───────────────────────────────── */
+QWidget#LabInfoRow {
+    background: transparent;
+}
+
+QLabel#LabInfoLabel {
+    font-size: 12px;
+    color: #9ba4b5;
+    font-weight: 500;
+}
+
+QLabel#LabInfoValue {
+    font-size: 12px;
+    color: #2d3340;
+    font-weight: 600;
+}
+
+/* ── Buttons ─────────────────────────────────── */
+QPushButton#CreateButton {
+    background: #3584e4;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 0px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 34px;
+}
+QPushButton#CreateButton:hover {
+    background: #2870c8;
+}
+QPushButton#CreateButton:pressed {
+    background: #2060b0;
+}
+
+QPushButton#EditButton {
+    background: #f0f2f5;
+    color: #2d3340;
+    border: 1px solid #dde0e7;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+}
+QPushButton#EditButton:hover {
+    background: #e4e8ef;
+    border-color: #c8ccd6;
+}
+QPushButton#EditButton:pressed {
+    background: #d8dce6;
+}
+
+QPushButton#OpenButton {
+    background: #3584e4;
+    color: #ffffff;
+    border: none;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#OpenButton:hover {
+    background: #2870c8;
+}
+QPushButton#OpenButton:pressed {
+    background: #2060b0;
+}
+
+QPushButton#TrashButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}
+QPushButton#TrashButton:hover {
+    background: #fdecea;
+}
+
+/* ── Stats panel ─────────────────────────────── */
+QFrame#StatsPanel {
+    background: #ffffff;
+    border: 1px solid #e8eaef;
+    border-radius: 12px;
+}
+
+QLabel#StatsTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f1117;
+}
+
+QLabel#StatsSubTitle {
+    font-size: 11px;
+    color: #9ba4b5;
+}
+
+QFrame#StatChip {
+    background: #f7f9fc;
+    border: 1px solid #ebeef3;
+    border-radius: 10px;
+}
+
+QLabel#ChipEmoji {
+    font-size: 18px;
+}
+
+QLabel#StatValue {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f1117;
+}
+
+QLabel#StatLabel {
+    font-size: 11px;
+    color: #9ba4b5;
+    font-weight: 500;
+}
+
+/* ── Empty state ─────────────────────────────── */
+QFrame#EmptyState {
+    background: #ffffff;
+    border: 1px dashed #d4d8e2;
+    border-radius: 14px;
+}
+
+QLabel#EmptyIcon {
+    font-size: 40px;
+}
+
+QLabel#EmptyTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2d3340;
+}
+
+QLabel#EmptyDesc {
+    font-size: 12px;
+    color: #9ba4b5;
+}
+
+/* ── Scrollbar ───────────────────────────────── */
+QScrollArea#DashboardScroll QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 0;
+}
+QScrollArea#DashboardScroll QScrollBar::handle:vertical {
+    background: #c8cdd8;
+    border-radius: 3px;
+    min-height: 30px;
+}
+QScrollArea#DashboardScroll QScrollBar::handle:vertical:hover {
+    background: #a8b0c0;
+}
+QScrollArea#DashboardScroll QScrollBar::add-line:vertical,
+QScrollArea#DashboardScroll QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollArea#DashboardScroll QScrollBar::add-page:vertical,
+QScrollArea#DashboardScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+
 """
 
 

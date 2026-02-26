@@ -3,12 +3,11 @@ import re
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFrame, QGraphicsOpacityEffect, QMessageBox,
-    QSizePolicy, QSpacerItem
+    QPushButton, QFrame, QMessageBox, QSizePolicy, QSpacerItem
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint
-from PySide6.QtGui import QColor, QFont, QPainter, QMouseEvent, QEnterEvent, QPen
-
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, Property
+from PySide6.QtGui import QColor, QFont, QPainter, QMouseEvent, QEnterEvent, QPen, QBrush
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
 _IPV4_REGEX = re.compile(
     r"^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
@@ -16,45 +15,67 @@ _IPV4_REGEX = re.compile(
 )
 
 
+class _DimOverlay(QWidget):
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self._alpha = 0
+        self.setGeometry(parent.rect())
+        self.raise_()
+        self.show()
+        self._anim = QPropertyAnimation(self, b"dim_alpha")
+        self._anim.setDuration(180)
+        self._anim.setStartValue(0)
+        self._anim.setEndValue(160)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.start()
+
+    def _get_alpha(self): return self._alpha
+    def _set_alpha(self, v):
+        self._alpha = v; self.update()
+    dim_alpha = Property(int, _get_alpha, _set_alpha)
+
+    def fade_out(self, done_cb=None):
+        self._anim2 = QPropertyAnimation(self, b"dim_alpha")
+        self._anim2.setDuration(150)
+        self._anim2.setStartValue(self._alpha)
+        self._anim2.setEndValue(0)
+        self._anim2.setEasingCurve(QEasingCurve.InCubic)
+        if done_cb: self._anim2.finished.connect(done_cb)
+        self._anim2.start()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(0, 0, 0, self._alpha))
+        p.end()
+
+
 class CloseButton(QPushButton):
-    """Custom close button with red hover effect"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(32, 32)
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.NoFocus)
         self._hovered = False
-        
+
     def enterEvent(self, event: QEnterEvent):
-        self._hovered = True
-        self.update()
-        super().enterEvent(event)
-        
+        self._hovered = True; self.update(); super().enterEvent(event)
+
     def leaveEvent(self, event):
-        self._hovered = False
-        self.update()
-        super().leaveEvent(event)
-        
+        self._hovered = False; self.update(); super().leaveEvent(event)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Background circle
-        if self._hovered:
-            painter.setBrush(QColor(239, 68, 68, 30))  # Red with low opacity
-        else:
-            painter.setBrush(Qt.transparent)
+        painter.setBrush(QBrush(QColor(239, 68, 68, 30)) if self._hovered else Qt.transparent)
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(4, 4, 24, 24)
-        
-        # X mark
-        if self._hovered:
-            painter.setPen(QPen(QColor(239, 68, 68), 2.5))  # Red when hovered
-        else:
-            painter.setPen(QPen(QColor(156, 163, 175), 2))  # Gray default
-        margin = 11
-        painter.drawLine(margin, margin, 32 - margin, 32 - margin)
-        painter.drawLine(32 - margin, margin, margin, 32 - margin)
+        painter.setPen(QPen(QColor(239, 68, 68) if self._hovered else QColor(156, 163, 175),
+                           2.5 if self._hovered else 2))
+        m = 11
+        painter.drawLine(m, m, 32 - m, 32 - m)
+        painter.drawLine(32 - m, m, m, 32 - m)
 
 
 class EditPcIpDialog(QDialog):
@@ -68,20 +89,28 @@ class EditPcIpDialog(QDialog):
         self._pc_name = pc_name
         self._current_ip = current_ip
 
-        # Frameless + translucent bg (for overlay)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        
-        # For window dragging
         self._drag_position: QPoint | None = None
+        self.setFixedSize(480, 300)
+        self.setWindowOpacity(0.0)
 
-        # Size for proper alignment
-        self.setFixedSize(540, 320)
+        # Dim overlay
+        self._overlay: _DimOverlay | None = None
+        if parent:
+            self._overlay = _DimOverlay(parent)
+
+        # Drop shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.setGraphicsEffect(shadow)
 
         self._build_ui()
         QTimer.singleShot(0, self._animate_in)
 
-    # ---------------- Window Dragging ----------------
+    # ── Dragging ──────────────────────────────────────────────
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
             self._drag_position = event.globalPosition().toPoint()
@@ -96,293 +125,237 @@ class EditPcIpDialog(QDialog):
         if event.button() == Qt.LeftButton:
             self._drag_position = None
 
-    # ---------------- Animation ----------------
-    def _animate_in(self):
-        self._center_on_parent()
+    # ── Paint ─────────────────────────────────────────────────
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        r = self.rect()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(QColor(252, 252, 252)))
+        painter.drawRoundedRect(r, 12, 12)
+        painter.setPen(QPen(QColor(0, 0, 0, 28), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 11, 11)
+        painter.end()
+        super().paintEvent(event)
 
-        fx = QGraphicsOpacityEffect(self.card)
-        self.card.setGraphicsEffect(fx)
-        fx.setOpacity(0.0)
-
-        anim = QPropertyAnimation(fx, b"opacity", self)
-        anim.setDuration(220)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
-        anim.start()
-        self._anim = anim
-
-    def _center_on_parent(self):
-        if not self.parent():
-            return
-        pg = self.parent().geometry()
-        self.move(
-            pg.center().x() - self.width() // 2,
-            pg.center().y() - self.height() // 2
-        )
-
-    # ---------------- UI ----------------
+    # ── UI ────────────────────────────────────────────────────
     def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        self.card = QFrame(self)
-        self.card.setObjectName("EditPcIpCard")
-        self.card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # Apply light mode styles directly
         self.setStyleSheet("""
-            QFrame#EditPcIpCard {
-                background: white;
-                border: 1px solid #e2e8f0;
-                border-radius: 20px;
+            QLabel { background: transparent; color: #1a1a1a; }
+            QLabel#DialogTitle { font-size: 15px; font-weight: 700; color: #0f172a; }
+            QLabel#FieldLabel  { font-size: 11px; font-weight: 600; color: #64748b; }
+            QLabel#FieldValueGray {
+                background: #f4f6f9; border: 1px solid #e2e8f0;
+                border-radius: 8px; color: #1e293b;
+                font-size: 13px; font-weight: 600; padding: 0 10px;
             }
-            QLabel#EditPcIpIcon {
-                color: #2563eb;
-                background: transparent;
+            QLabel#FieldValueBlue {
+                background: #eff6ff; border: 1px solid #dbeafe;
+                border-radius: 8px; color: #2563eb;
+                font-size: 13px; font-weight: 600;
+                font-family: 'Consolas', monospace; padding: 0 10px;
             }
-            QLabel#EditPcIpTitle {
-                color: #0f172a;
-                font-size: 16px;
-                font-weight: 800;
-                background: transparent;
+            QFrame#Divider {
+                background: #edf0f5; border: none;
+                min-height: 1px; max-height: 1px;
             }
-            QLabel#EditPcIpLabel {
-                color: #64748b;
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                background: transparent;
-                min-width: 120px;
-                max-width: 120px;
-                padding-right: 8px;
+            QLineEdit {
+                background: #f8fafc; border: 1px solid #e2e8f0;
+                border-radius: 8px; padding: 0 12px; color: #0f172a;
+                font-size: 13px; font-family: 'Consolas', monospace;
+                selection-background-color: #bfdbfe;
             }
-            QLabel#EditPcIpCurrentLabel {
-                color: #64748b;
-                font-size: 13px;
-                font-weight: 500;
-                background: transparent;
-                min-width: 120px;
-                max-width: 120px;
-                padding-right: 8px;
+            QLineEdit:focus { border: 1px solid #3b82f6; background: #fff; }
+            QLineEdit:hover { border: 1px solid #94a3b8; }
+            QPushButton#CancelBtn {
+                background: #f1f4f9; border: 1px solid #e2e8f0;
+                border-radius: 8px; color: #475569;
+                font-size: 13px; font-weight: 600;
             }
-            QLabel#EditPcIpPcName {
-                background: #f8fafc;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                color: #0f172a;
-                font-size: 15px;
-                font-weight: 600;
-                padding: 0px 12px;
+            QPushButton#CancelBtn:hover { background: #e8ecf4; border-color: #c8cdd8; color: #1e293b; }
+            QPushButton#CancelBtn:pressed { background: #dde2ec; }
+            QPushButton#PrimaryBtn {
+                background: #2563eb; border: none; border-radius: 8px;
+                color: white; font-size: 13px; font-weight: 700;
             }
-            QLabel#EditPcIpCurrentValue {
-                background: #f8fafc;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                color: #2563eb;
-                font-size: 14px;
-                font-weight: 600;
-                font-family: 'Consolas', monospace;
-                padding: 0px 12px;
-            }
-            QLineEdit#EditPcIpInput {
-                background: #f8fafc;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                padding: 8px 12px;
-                color: #0f172a;
-                font-size: 14px;
-                font-family: 'Consolas', monospace;
-            }
-            QLineEdit#EditPcIpInput:focus {
-                border: 1px solid #2563eb;
-                background: #ffffff;
-            }
-            QLineEdit#EditPcIpInput:hover {
-                border: 1px solid #94a3b8;
-            }
-            QPushButton#EditPcIpCancelBtn {
-                background: white;
-                border: 1px solid #e2e8f0;
-                color: #64748b;
-                border-radius: 10px;
-                font-weight: 600;
-                font-size: 13px;
-                padding: 8px 16px;
-            }
-            QPushButton#EditPcIpCancelBtn:hover {
-                background: #f8fafc;
-                border: 1px solid #2563eb;
-                color: #0f172a;
-            }
-            QPushButton#EditPcIpCancelBtn:pressed {
-                background: #f1f5f9;
-            }
-            QPushButton#EditPcIpSaveBtn {
-                background: #2563eb;
-                border: none;
-                color: white;
-                border-radius: 10px;
-                font-weight: 700;
-                font-size: 13px;
-                padding: 8px 16px;
-            }
-            QPushButton#EditPcIpSaveBtn:hover {
-                background: #1d4ed8;
-            }
-            QPushButton#EditPcIpSaveBtn:pressed {
-                background: #1e40af;
-            }
+            QPushButton#PrimaryBtn:hover   { background: #1d4ed8; }
+            QPushButton#PrimaryBtn:pressed { background: #1e40af; }
         """)
 
-        card_lay = QVBoxLayout(self.card)
-        card_lay.setContentsMargins(32, 24, 32, 24)
-        card_lay.setSpacing(18)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 22, 24, 22)
+        root.setSpacing(16)
 
-        # Header with close button
-        header = QHBoxLayout()
-        header.setSpacing(12)
+        # Header
+        hdr = QHBoxLayout()
+        hdr.setSpacing(10)
 
         icon = QLabel("✏️")
-        icon.setObjectName("EditPcIpIcon")
         icon.setFixedSize(32, 32)
         icon.setAlignment(Qt.AlignCenter)
-        icon.setFont(QFont("Segoe UI", 18))
+        icon.setFont(QFont("Segoe UI Emoji", 16))
 
         title = QLabel("Edit IP Address")
-        title.setObjectName("EditPcIpTitle")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setObjectName("DialogTitle")
 
-        header.addWidget(icon)
-        header.addWidget(title)
-        header.addStretch()
-        
-        # Close button
         self.close_btn = CloseButton()
         self.close_btn.clicked.connect(self.reject)
-        header.addWidget(self.close_btn)
-        
-        card_lay.addLayout(header)
 
-        # PC NAME row - side by side
-        pc_row = QHBoxLayout()
-        pc_row.setSpacing(12)
+        hdr.addWidget(icon)
+        hdr.addWidget(title, 1)
+        hdr.addWidget(self.close_btn)
+        root.addLayout(hdr)
 
-        pc_label = QLabel("PC NAME")
-        pc_label.setObjectName("EditPcIpLabel")
-        pc_label.setFixedWidth(120)
-        pc_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # Divider
+        div = QFrame(); div.setObjectName("Divider")
+        root.addWidget(div)
 
-        pc_value = QLabel(self._pc_name)
-        pc_value.setObjectName("EditPcIpPcName")
-        pc_value.setAlignment(Qt.AlignCenter)
-        pc_value.setFixedHeight(42)
-        pc_value.setFixedWidth(200)
+        # Fields
+        fields = QVBoxLayout()
+        fields.setSpacing(12)
 
-        pc_row.addWidget(pc_label)
-        pc_row.addWidget(pc_value)
-        pc_row.addStretch()
-        card_lay.addLayout(pc_row)
+        def field_row(label_text, widget):
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            lbl = QLabel(label_text)
+            lbl.setObjectName("FieldLabel")
+            lbl.setFixedWidth(110)
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row.addWidget(lbl)
+            row.addWidget(widget, 1)
+            return row
 
-        # Current IP row - side by side
-        current_row = QHBoxLayout()
-        current_row.setSpacing(12)
+        # PC Name (read-only)
+        pc_val = QLabel(self._pc_name)
+        pc_val.setObjectName("FieldValueGray")
+        pc_val.setFixedHeight(36)
+        pc_val.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        fields.addLayout(field_row("PC NAME", pc_val))
 
-        current_label = QLabel("Current IP:")
-        current_label.setObjectName("EditPcIpCurrentLabel")
-        current_label.setFixedWidth(120)
-        current_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # Current IP (read-only)
+        cur_val = QLabel(self._current_ip)
+        cur_val.setObjectName("FieldValueBlue")
+        cur_val.setFixedHeight(36)
+        cur_val.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        fields.addLayout(field_row("CURRENT IP", cur_val))
 
-        current_value = QLabel(self._current_ip)
-        current_value.setObjectName("EditPcIpCurrentValue")
-        current_value.setAlignment(Qt.AlignCenter)
-        current_value.setFixedHeight(42)
-        current_value.setFixedWidth(200)
-
-        current_row.addWidget(current_label)
-        current_row.addWidget(current_value)
-        current_row.addStretch()
-        card_lay.addLayout(current_row)
-
-        # NEW IP ADDRESS row - side by side (fixed width 120px)
-        new_row = QHBoxLayout()
-        new_row.setSpacing(12)
-
-        new_label = QLabel("NEW IP ADDRESS")
-        new_label.setObjectName("EditPcIpLabel")
-        new_label.setFixedWidth(120)
-        new_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        new_label.setWordWrap(False)
-
+        # New IP (editable)
         self.ip_edit = QLineEdit()
         self.ip_edit.setObjectName("EditPcIpInput")
         self.ip_edit.setPlaceholderText("Enter new IP address")
         self.ip_edit.setText(self._current_ip)
         self.ip_edit.selectAll()
-        self.ip_edit.setFixedHeight(42)
-        self.ip_edit.setFixedWidth(200)
-        self.ip_edit.setAlignment(Qt.AlignCenter)
+        self.ip_edit.setFixedHeight(38)
+        fields.addLayout(field_row("NEW IP", self.ip_edit))
 
-        new_row.addWidget(new_label)
-        new_row.addWidget(self.ip_edit)
-        new_row.addStretch()
-        card_lay.addLayout(new_row)
+        root.addLayout(fields)
+        root.addStretch()
 
-        # Spacer
-        card_lay.addSpacerItem(QSpacerItem(20, 10, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # Bottom divider
+        div2 = QFrame(); div2.setObjectName("Divider")
+        root.addWidget(div2)
 
-        # Buttons - at bottom
-        btn_container = QHBoxLayout()
-        btn_container.setSpacing(16)
-        btn_container.setContentsMargins(0, 8, 0, 0)
-
-        btn_container.addStretch(1)
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.setContentsMargins(0, 6, 0, 0)
+        btn_row.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("EditPcIpCancelBtn")
+        cancel_btn.setObjectName("CancelBtn")
         cancel_btn.setCursor(Qt.PointingHandCursor)
-        cancel_btn.setFixedHeight(42)
-        cancel_btn.setFixedWidth(130)
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.setFixedWidth(110)
         cancel_btn.clicked.connect(self.reject)
 
         save_btn = QPushButton("Save")
-        save_btn.setObjectName("EditPcIpSaveBtn")
+        save_btn.setObjectName("PrimaryBtn")
         save_btn.setCursor(Qt.PointingHandCursor)
-        save_btn.setFixedHeight(42)
-        save_btn.setFixedWidth(130)
+        save_btn.setFixedHeight(36)
+        save_btn.setFixedWidth(110)
         save_btn.clicked.connect(self._save)
 
-        btn_container.addWidget(cancel_btn)
-        btn_container.addWidget(save_btn)
-        btn_container.addStretch(1)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(save_btn)
+        root.addLayout(btn_row)
 
-        card_lay.addLayout(btn_container)
+    # ── Animation ─────────────────────────────────────────────
+    def _animate_in(self):
+        self._center_on_parent()
+        self._start_pos = self.pos()
+        start = QPoint(self._start_pos.x(), self._start_pos.y() - 12)
+        self.move(start)
+        self.setWindowOpacity(0.0)
 
-        # Add card to root
-        root.addWidget(self.card)
+        self._op_anim = QPropertyAnimation(self, b"windowOpacity")
+        self._op_anim.setDuration(200)
+        self._op_anim.setStartValue(0.0)
+        self._op_anim.setEndValue(1.0)
+        self._op_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.end()
-        super().paintEvent(event)
+        self._pos_anim = QPropertyAnimation(self, b"pos")
+        self._pos_anim.setDuration(220)
+        self._pos_anim.setStartValue(start)
+        self._pos_anim.setEndValue(self._start_pos)
+        self._pos_anim.setEasingCurve(QEasingCurve.OutCubic)
 
+        self._op_anim.start()
+        self._pos_anim.start()
+
+    def _center_on_parent(self):
+        if not self.parent(): return
+        pg = self.parent().geometry()
+        self.move(
+            pg.x() + pg.width()  // 2 - self.width()  // 2,
+            pg.y() + pg.height() // 2 - self.height() // 2,
+        )
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._center_on_parent()
+        if self._overlay and self.parent():
+            self._overlay.setGeometry(self.parent().rect())
+            self._overlay.raise_()
+            self.raise_()
+
+    def _dismiss(self, accepted: bool):
+        for name in ("_op_anim", "_pos_anim"):
+            obj = getattr(self, name, None)
+            if obj:
+                try: obj.stop()
+                except Exception: pass
+
+        self._exit_anim = QPropertyAnimation(self, b"windowOpacity")
+        self._exit_anim.setDuration(130)
+        self._exit_anim.setStartValue(self.windowOpacity())
+        self._exit_anim.setEndValue(0.0)
+        self._exit_anim.setEasingCurve(QEasingCurve.InCubic)
+
+        def _finish():
+            if self._overlay:
+                self._overlay.fade_out(done_cb=lambda: (
+                    self._overlay.deleteLater(),
+                    self.accept() if accepted else super(EditPcIpDialog, self).reject()
+                ))
+            else:
+                self.accept() if accepted else super(EditPcIpDialog, self).reject()
+
+        self._exit_anim.finished.connect(_finish)
+        self._exit_anim.start()
+
+    def reject(self):
+        self._dismiss(accepted=False)
+
+    # ── Functionality (unchanged) ─────────────────────────────
     def _save(self):
         ip = self.ip_edit.text().strip()
         if not _IPV4_REGEX.match(ip):
             try:
                 from .glass_messagebox import show_glass_message
-                show_glass_message(
-                    self,
-                    "Invalid IP",
-                    "Please enter a valid IPv4 address.",
-                    icon=QMessageBox.Warning
-                )
+                show_glass_message(self, "Invalid IP", "Please enter a valid IPv4 address.", icon=QMessageBox.Warning)
             except Exception:
                 QMessageBox.warning(self, "Invalid IP", "Please enter a valid IPv4 address.")
             return
-
         self.new_ip = ip
-        self.accept()
+        self._dismiss(accepted=True)
