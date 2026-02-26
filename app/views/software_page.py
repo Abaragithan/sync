@@ -674,11 +674,11 @@ class SoftwarePage(QWidget):
     ) -> str | None:
         import os
 
-        ansible_dir  = os.path.join(project_root, "ansible")
-        real_inv     = os.path.join(ansible_dir, "inventory", "hosts.ini")
-        tmp_dir      = os.path.join(ansible_dir, "inventory")
-        tmp_path     = os.path.join(tmp_dir, "_sync_tmp_inventory.ini")
+        ansible_dir = os.path.join(project_root, "ansible")
+        real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
+        tmp_path    = os.path.join(ansible_dir, "inventory", "_sync_tmp_inventory.ini")
 
+        # Extract ONLY the [group:vars] section from hosts.ini
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
             with open(real_inv, "r") as f:
@@ -690,10 +690,12 @@ class SoftwarePage(QWidget):
                         group_vars_lines.append(line)
                         continue
                     if in_vars:
-                        if stripped.startswith("[") and not stripped.startswith(f"[{group}"):
+                        if stripped.startswith("["):  # hit next section → stop
                             in_vars = False
                         else:
                             group_vars_lines.append(line)
+        else:
+            print(f"[SoftwarePage] WARNING: hosts.ini not found at {real_inv}")
 
         try:
             with open(tmp_path, "w") as f:
