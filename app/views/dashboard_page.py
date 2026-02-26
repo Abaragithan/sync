@@ -96,17 +96,14 @@ class TrashButton(QPushButton):
         self._lid_angle = 0.0
         self._bin_scale = 1.0
 
-        # Hover: lid opens/closes
         self._hover_anim = QPropertyAnimation(self, b"lid_angle")
         self._hover_anim.setDuration(180)
         self._hover_anim.setEasingCurve(QEasingCurve.OutBack)
 
-        # Click: small scale "pop"
         self._click_anim = QPropertyAnimation(self, b"bin_scale")
         self._click_anim.setDuration(140)
         self._click_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        # Make it feel like an icon button
         self.setFixedSize(32, 32)
         self.setFlat(True)
 
@@ -139,7 +136,6 @@ class TrashButton(QPushButton):
         self._click_anim.start()
 
     def paintEvent(self, event):
-        # IMPORTANT: allows stylesheet hover background (if you add QSS)
         super().paintEvent(event)
 
         painter = QPainter(self)
@@ -151,7 +147,6 @@ class TrashButton(QPushButton):
         cx = w // 2
         cy = h // 2
 
-        # Light mode colors only
         bin_color = QColor(200, 60, 60)
         lid_color = QColor(180, 50, 50)
         outline = QColor(0, 0, 0, 35)
@@ -161,23 +156,19 @@ class TrashButton(QPushButton):
             bin_color = bin_color.lighter(115)
             lid_color = lid_color.lighter(115)
 
-        # Scale animation
         painter.translate(cx, cy)
         painter.scale(self._bin_scale, self._bin_scale)
         painter.translate(-cx, -cy)
 
-        # Body
         body = QRect(cx - 8, cy - 2, 16, 12)
         painter.setBrush(QBrush(bin_color))
         painter.setPen(QPen(outline, 1))
         painter.drawRoundedRect(body, 2, 2)
 
-        # Body details
         painter.setPen(QPen(detail, 1))
         painter.drawLine(cx - 4, cy + 2, cx - 1, cy + 2)
         painter.drawLine(cx + 1, cy + 2, cx + 4, cy + 2)
 
-        # Lid (rotates around hinge)
         painter.save()
         hinge_x = cx
         hinge_y = cy - 4
@@ -190,7 +181,6 @@ class TrashButton(QPushButton):
         painter.setPen(QPen(outline, 1))
         painter.drawRoundedRect(lid, 2, 2)
 
-        # Handle
         painter.setBrush(QBrush(lid_color.lighter(120)))
         painter.setPen(Qt.NoPen)
         handle = QRect(cx - 3, cy - 12, 6, 3)
@@ -200,7 +190,7 @@ class TrashButton(QPushButton):
 
 
 # ────────────────────────────────────────────────
-#   DashboardPage (Max 2 columns + Stats Panel - Light Mode Only)
+#   DashboardPage
 # ────────────────────────────────────────────────
 class DashboardPage(QWidget):
     lab_selected = Signal(str)
@@ -229,7 +219,6 @@ class DashboardPage(QWidget):
         header.addWidget(brand)
 
         header.addStretch()
-        # Theme toggle removed - light mode only
         layout.addLayout(header)
 
         # ─── New Lab Button
@@ -259,14 +248,12 @@ class DashboardPage(QWidget):
         self.grid_layout.setVerticalSpacing(20)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
-        # ✅ Always max 2 columns
         self.grid_layout.setColumnStretch(0, 1)
         self.grid_layout.setColumnStretch(1, 1)
 
         self.scroll.setWidget(self.scroll_widget)
         layout.addWidget(self.scroll, 1)
 
-    # ─── Row widget: Label + Value
     def _info_row(self, label_text: str, value_text: str) -> QWidget:
         row = QWidget()
         row.setObjectName("LabInfoRow")
@@ -300,7 +287,6 @@ class DashboardPage(QWidget):
         layout.setContentsMargins(22, 20, 22, 18)
         layout.setSpacing(10)
 
-        # Header
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
 
@@ -310,7 +296,6 @@ class DashboardPage(QWidget):
         header.addStretch()
         layout.addLayout(header)
 
-        # Data
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
         count = len(pcs)
 
@@ -333,7 +318,6 @@ class DashboardPage(QWidget):
 
         layout.addStretch()
 
-        # Actions (same signals, only UI sizes + custom trash icon)
         actions = QHBoxLayout()
         actions.setSpacing(8)
 
@@ -356,16 +340,12 @@ class DashboardPage(QWidget):
         actions.addStretch()
 
         trash_btn = TrashButton()
-        # Theme property removed - light mode only
         trash_btn.clicked.connect(lambda: self._confirm_delete(lab_name))
         actions.addWidget(trash_btn)
 
         layout.addLayout(actions)
         return card
 
-    # ────────────────────────────────────────────────
-    #   Stats Panel (fills extra empty area)
-    # ────────────────────────────────────────────────
     def _create_stats_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("StatsPanel")
@@ -495,7 +475,7 @@ class DashboardPage(QWidget):
             icon.setObjectName("EmptyIcon")
             title = QLabel("No labs yet")
             title.setObjectName("EmptyTitle")
-            desc = QLabel("Click “+ New Lab” to create your first laboratory")
+            desc = QLabel('Click "+ New Lab" to create your first laboratory')
             desc.setObjectName("EmptyDesc")
 
             box.addWidget(icon, 0, Qt.AlignCenter)
@@ -519,6 +499,10 @@ class DashboardPage(QWidget):
 
         self._animate_cards_in(cards)
 
+    # ── ONLY THIS METHOD CHANGED ──────────────────────────────────────────
+    # Removed the manual pcs-building loop (which was section-first and passed
+    # dicts). Now passes raw IP strings directly to inventory_manager, which
+    # assigns section/row/col using row-first ordering via build_pcs_from_ips().
     def _open_create_dialog(self):
         try:
             dlg = CreateLabDialog(self)
@@ -526,29 +510,23 @@ class DashboardPage(QWidget):
                 return
 
             data = dlg.get_data()
-            layout = data["layout"]
-            ips = data["ips"]
 
-            pcs = []
-            idx = 0
-            for sec in range(1, layout["sections"] + 1):
-                for r in range(1, layout["rows"] + 1):
-                    for c in range(1, layout["cols"] + 1):
-                        pcs.append({
-                            "name": f"PC-{idx+1:03d}",
-                            "ip": ips[idx],
-                            "section": sec,
-                            "row": r,
-                            "col": c
-                        })
-                        idx += 1
+            # data["ips"] is a plain list of IP strings e.g. ["10.0.0.1", ...]
+            # inventory_manager.add_lab_with_layout() calls build_pcs_from_ips()
+            # internally, which assigns IPs row-first across all sections:
+            #   Row 1 of S1 → Row 1 of S2 → Row 1 of S3 → Row 2 of S1 → ...
+            self.inventory_manager.add_lab_with_layout(
+                data["lab_name"],
+                data["layout"],
+                data["ips"],
+            )
 
-            self.inventory_manager.add_lab_with_layout(data["lab_name"], layout, pcs)
             self.refresh_labs()
             show_glass_message(self, "Success", f"Lab '{data['lab_name']}' created", QMessageBox.Information)
 
         except Exception as e:
             show_glass_message(self, "Error", str(e), QMessageBox.Critical)
+    # ─────────────────────────────────────────────────────────────────────
 
     def _confirm_delete(self, lab_name: str):
         pcs = self.inventory_manager.get_pcs_for_lab(lab_name)
@@ -558,6 +536,5 @@ class DashboardPage(QWidget):
             if self.inventory_manager.delete_lab(lab_name):
                 self.refresh_labs()
                 show_glass_message(self, "Deleted", f"Lab '{lab_name}' has been deleted.", QMessageBox.Information)
-
             else:
                 show_glass_message(self, "Error", f"Failed to delete lab '{lab_name}'.", QMessageBox.Critical)
