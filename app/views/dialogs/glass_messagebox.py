@@ -1,27 +1,103 @@
 from __future__ import annotations
 
-import math
-import random
-
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect, Property, QPoint
-from PySide6.QtWidgets import (
-    QDialog, QFrame, QLabel, QPushButton, QHBoxLayout, QVBoxLayout,
-    QMessageBox, QGraphicsDropShadowEffect
+from PySide6.QtCore import (
+    Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, Property
 )
-from PySide6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush, QFont, QPainterPath
+from PySide6.QtWidgets import (
+    QDialog, QLabel, QPushButton, QHBoxLayout, QVBoxLayout,
+    QMessageBox, QWidget, QApplication, QFrame, QMainWindow,
+    QGraphicsDropShadowEffect
+)
+from PySide6.QtGui import (
+    QPainter, QColor, QFont, QPen, QBrush, QPainterPath
+)
 
 
+# ──────────────────────────────────────────────────────────────
+#  Dim overlay
+# ──────────────────────────────────────────────────────────────
+class _DimOverlay(QWidget):
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self._alpha = 0
+        self.setGeometry(parent.rect())
+        self.raise_()
+        self.show()
+
+        self._anim = QPropertyAnimation(self, b"dim_alpha")
+        self._anim.setDuration(180)
+        self._anim.setStartValue(0)
+        self._anim.setEndValue(160)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.start()
+
+    def _get_alpha(self): return self._alpha
+    def _set_alpha(self, v):
+        self._alpha = v
+        self.update()
+    dim_alpha = Property(int, _get_alpha, _set_alpha)
+
+    def fade_out(self, done_cb=None):
+        self._anim2 = QPropertyAnimation(self, b"dim_alpha")
+        self._anim2.setDuration(150)
+        self._anim2.setStartValue(self._alpha)
+        self._anim2.setEndValue(0)
+        self._anim2.setEasingCurve(QEasingCurve.InCubic)
+        if done_cb:
+            self._anim2.finished.connect(done_cb)
+        self._anim2.start()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(0, 0, 0, self._alpha))
+        p.end()
+
+
+# ──────────────────────────────────────────────────────────────
+#  Light GTK-style Dialog
+# ──────────────────────────────────────────────────────────────
 class RibbonMessageBox(QDialog):
     """
-    Glass message dialog - Light Mode Only:
-    - Information: ribbons + confetti (celebration)
-    - Warning / Question: NO confetti (only glass + entrance animation)
-    - Critical: glitch + shake
+    Light-theme GTK/Adwaita-style message dialog.
+    Clean rounded corners, no decorative bars, fits light desktop UIs.
     """
+
+    _TYPE_CFG = {
+        QMessageBox.Information: {
+            "icon":      "ℹ",
+            "icon_fg":   QColor(255, 255, 255),
+            "icon_bg":   QColor(53,  132, 228),
+            "btn":       QColor(53,  132, 228),
+            "btn_hover": QColor(36,  110, 200),
+        },
+        QMessageBox.Warning: {
+            "icon":      "⚠",
+            "icon_fg":   QColor(255, 255, 255),
+            "icon_bg":   QColor(198, 128,   0),
+            "btn":       QColor(198, 128,   0),
+            "btn_hover": QColor(160, 100,   0),
+        },
+        QMessageBox.Question: {
+            "icon":      "?",
+            "icon_fg":   QColor(255, 255, 255),
+            "icon_bg":   QColor(53,  132, 228),
+            "btn":       QColor(53,  132, 228),
+            "btn_hover": QColor(36,  110, 200),
+        },
+        QMessageBox.Critical: {
+            "icon":      "✕",
+            "icon_fg":   QColor(255, 255, 255),
+            "icon_bg":   QColor(192,  28,  40),
+            "btn":       QColor(192,  28,  40),
+            "btn_hover": QColor(155,  20,  30),
+        },
+    }
 
     def __init__(
         self,
-        parent,
+        parent: QWidget,
         title: str,
         text: str,
         icon: QMessageBox.Icon = QMessageBox.Information,
@@ -31,458 +107,432 @@ class RibbonMessageBox(QDialog):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setModal(True)
+        self.resize(400, 170)
 
-        # Window size
-        self.resize(520, 240)
-
-        self._icon_type = icon
-        self._clicked = QMessageBox.NoButton
-
-        # FX state
-        self._particles: list[dict] = []
-        self._glitch_offset = 0
-        self._ribbon_angle = 0.0
-
-        # Entrance anchor
+        self._icon_type  = icon
+        self._clicked    = QMessageBox.NoButton
+        self._cfg        = self._TYPE_CFG.get(icon, self._TYPE_CFG[QMessageBox.Information])
         self._start_pos: QPoint | None = None
         self.setWindowOpacity(0.0)
 
-        # Card container (transparent, we paint glass)
-        self.card = QFrame(self)
-        self.card.setObjectName("RibbonCard")
-        self.card.setGeometry(40, 26, 440, 190)
-        self.card.setStyleSheet("QFrame#RibbonCard{ background: transparent; border: none; }")
-        self.card.setAttribute(Qt.WA_TranslucentBackground, True)
+        # Dim overlay
+        self._overlay: _DimOverlay | None = None
+        if parent:
+            self._overlay = _DimOverlay(parent)
 
-        # Shadow
-        shadow = QGraphicsDropShadowEffect(self.card)
-        shadow.setBlurRadius(26)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 75))
-        self.card.setGraphicsEffect(shadow)
+        # Drop shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.setGraphicsEffect(shadow)
 
-        # Layout
-        layout = QVBoxLayout(self.card)
-        layout.setContentsMargins(26, 22, 26, 18)
-        layout.setSpacing(12)
+        # ── Root layout ───────────────────────────
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Icon + Title
-        top = QHBoxLayout()
-        top.setSpacing(12)
+        # Content area
+        content = QHBoxLayout()
+        content.setContentsMargins(22, 22, 22, 14)
+        content.setSpacing(14)
+        content.setAlignment(Qt.AlignTop)
 
-        self.icon_lbl = QLabel(self._get_icon_emoji())
-        self.icon_lbl.setFont(QFont("Segoe UI Emoji", 36))
-        self.icon_lbl.setFixedSize(58, 58)
-        self.icon_lbl.setAlignment(Qt.AlignCenter)
+        # Icon circle
+        self._icon_lbl = QLabel(self._cfg["icon"])
+        self._icon_lbl.setFixedSize(40, 40)
+        self._icon_lbl.setAlignment(Qt.AlignCenter)
+        self._icon_lbl.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        self._icon_lbl.setObjectName("IconCircle")
+        content.addWidget(self._icon_lbl, 0, Qt.AlignTop)
 
-        self.title_lbl = QLabel(title)
-        self.title_lbl.setWordWrap(True)
-        self.title_lbl.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        # Text block
+        txt_block = QVBoxLayout()
+        txt_block.setSpacing(4)
 
-        top.addWidget(self.icon_lbl, 0, Qt.AlignTop)
-        top.addWidget(self.title_lbl, 1, Qt.AlignVCenter)
-        layout.addLayout(top)
+        self._title_lbl = QLabel(title)
+        self._title_lbl.setWordWrap(True)
+        self._title_lbl.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        self._title_lbl.setObjectName("TitleLbl")
 
-        # Message
-        self.text_lbl = QLabel(text)
-        self.text_lbl.setWordWrap(True)
-        self.text_lbl.setAlignment(Qt.AlignCenter)
-        self.text_lbl.setFont(QFont("Segoe UI", 12))
-        layout.addWidget(self.text_lbl)
+        self._body_lbl = QLabel(text)
+        self._body_lbl.setWordWrap(True)
+        self._body_lbl.setFont(QFont("Segoe UI", 10))
+        self._body_lbl.setObjectName("BodyLbl")
 
-        layout.addStretch()
+        txt_block.addWidget(self._title_lbl)
+        txt_block.addWidget(self._body_lbl)
+        content.addLayout(txt_block, 1)
+        root.addLayout(content)
 
-        # Buttons
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-        btn_row.addStretch()
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setObjectName("Separator")
+        root.addWidget(sep)
+
+        # Button row
+        btn_area = QHBoxLayout()
+        btn_area.setContentsMargins(14, 10, 14, 14)
+        btn_area.setSpacing(8)
+        btn_area.addStretch()
 
         self._btn_widgets: list[QPushButton] = []
-        for std_btn in self._expand_buttons(buttons):
+        for i, std_btn in enumerate(self._expand_buttons(buttons)):
             btn = QPushButton(self._std_btn_text(std_btn))
-            btn.setFixedHeight(38)
-            btn.setMinimumWidth(100)
-            btn.setFont(QFont("Segoe UI", 11, QFont.Bold))
+            btn.setFixedHeight(32)
+            btn.setMinimumWidth(86)
+            btn.setFont(QFont("Segoe UI", 10))
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, b=std_btn: self._on_clicked(b))
-            btn_row.addWidget(btn)
+            btn.setProperty("primary", i == 0)
+            btn_area.addWidget(btn)
             self._btn_widgets.append(btn)
 
-        layout.addLayout(btn_row)
+        root.addLayout(btn_area)
 
         self._apply_styles()
+        QTimer.singleShot(0, self._animate_in)
 
-        # ✅ Confetti only for Information
-        self._create_particles()
+        if icon == QMessageBox.Critical:
+            QTimer.singleShot(120, self._start_shake)
 
-        # Start animations
-        self._start_effects()
+    # ─────────────────────────────────────────
+    #  Paint — light surface, rounded, NO top bar
+    # ─────────────────────────────────────────
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
 
-    # ------------------------------
-    # Icon emoji
-    # ------------------------------
-    def _get_icon_emoji(self) -> str:
-        if self._icon_type == QMessageBox.Critical:
-            return "💥"
-        if self._icon_type == QMessageBox.Warning:
-            return "⚠️"
-        if self._icon_type == QMessageBox.Question:
-            return "❓"
-        return "🎉"
+        r = self.rect()
 
-    # ------------------------------
-    # Particles
-    # ------------------------------
-    def _create_particles(self):
-        """Create confetti/glitch particles once (no random inside paint)."""
-        self._particles.clear()
+        # White card background
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(QColor(252, 252, 252)))
+        painter.drawRoundedRect(r, 12, 12)
 
-        # ✅ Confetti only for Information
-        if self._icon_type == QMessageBox.Information:
-            for _ in range(40):
-                self._particles.append({
-                    "x": random.randint(0, self.width()),
-                    "y": random.randint(-150, -20),
-                    "speed": random.uniform(2.2, 6.0),
-                    "size": random.randint(4, 10),
-                    "color": QColor(
-                        random.randint(200, 255),
-                        random.randint(150, 255),
-                        random.randint(120, 255),
-                        205
-                    ),
-                    "rotation": random.uniform(0, 360),
-                    "rot_speed": random.uniform(-3.0, 3.0),
-                    "shape": random.choice(["rect", "circle"]),  # ✅ no flicker
-                })
+        # Thin light border
+        painter.setPen(QPen(QColor(0, 0, 0, 28), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 11, 11)
 
-        elif self._icon_type == QMessageBox.Critical:
-            for _ in range(16):
-                self._particles.append({
-                    "x": random.randint(0, self.width()),
-                    "y": random.randint(0, self.height()),
-                    "offset_x": random.randint(-10, 10),
-                    "offset_y": random.randint(-5, 5),
-                    "alpha": 255,
-                    "life": 100
-                })
+        painter.end()
+        super().paintEvent(event)
 
-    # ------------------------------
-    # Effects
-    # ------------------------------
-    def _start_effects(self):
-        """Start animations based on icon type."""
-        if self._icon_type == QMessageBox.Information:
-            # Ribbon rotation
-            self._ribbon_anim = QPropertyAnimation(self, b"ribbon_angle")
-            self._ribbon_anim.setDuration(2600)
-            self._ribbon_anim.setStartValue(0.0)
-            self._ribbon_anim.setEndValue(360.0)
-            self._ribbon_anim.setLoopCount(-1)
-            self._ribbon_anim.start()
+    # ─────────────────────────────────────────
+    #  Styles
+    # ─────────────────────────────────────────
+    def _apply_styles(self):
+        cfg     = self._cfg
+        ic_bg   = cfg["icon_bg"]
+        ic_fg   = cfg["icon_fg"]
+        btn_c   = cfg["btn"]
+        btn_h   = cfg["btn_hover"]
 
-            # Confetti timer
-            self._confetti_timer = QTimer(self)
-            self._confetti_timer.timeout.connect(self._update_confetti)
-            self._confetti_timer.start(30)
+        def rgb(c: QColor): return f"rgb({c.red()},{c.green()},{c.blue()})"
 
-            QTimer.singleShot(0, self._animate_in)
+        self.setStyleSheet(f"""
+            RibbonMessageBox {{
+                background: transparent;
+            }}
 
-        elif self._icon_type in (QMessageBox.Warning, QMessageBox.Question):
-            # ✅ Alerts: only entrance animation (no confetti)
-            QTimer.singleShot(0, self._animate_in)
+            QLabel#IconCircle {{
+                background: {rgb(ic_bg)};
+                color: {rgb(ic_fg)};
+                border-radius: 20px;
+                font-weight: 700;
+            }}
 
-        elif self._icon_type == QMessageBox.Critical:
-            # Glitch timer
-            self._glitch_timer = QTimer(self)
-            self._glitch_timer.timeout.connect(self._update_glitch)
-            self._glitch_timer.start(80)
+            QLabel#TitleLbl {{
+                color: #1a1a1a;
+                background: transparent;
+                font-weight: 700;
+            }}
 
-            QTimer.singleShot(0, self._animate_in)
-            QTimer.singleShot(70, self._start_shake)
+            QLabel#BodyLbl {{
+                color: #555555;
+                background: transparent;
+            }}
 
-        else:
-            QTimer.singleShot(0, self._animate_in)
+            QFrame#Separator {{
+                background: #e0e0e0;
+                border: none;
+                max-height: 1px;
+                min-height: 1px;
+            }}
 
+            QPushButton {{
+                background: #f0f0f0;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                padding: 4px 14px;
+                color: #2a2a2a;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: #e4e4e4;
+                border-color: #b8b8b8;
+            }}
+            QPushButton:pressed {{
+                background: #d8d8d8;
+            }}
+
+            QPushButton[primary="true"] {{
+                background: {rgb(btn_c)};
+                border: 1px solid {rgb(btn_c)};
+                border-radius: 6px;
+                color: white;
+                font-weight: 600;
+            }}
+            QPushButton[primary="true"]:hover {{
+                background: {rgb(btn_h)};
+                border-color: {rgb(btn_h)};
+            }}
+            QPushButton[primary="true"]:pressed {{
+                background: {rgb(btn_h)};
+            }}
+        """)
+
+    # ─────────────────────────────────────────
+    #  Animations
+    # ─────────────────────────────────────────
     def _animate_in(self):
         if self._start_pos is None:
             self._center_on_parent()
             self._start_pos = self.pos()
 
-        start = QPoint(self._start_pos.x(), self._start_pos.y() - 14)
-        end = self._start_pos
-
+        start = QPoint(self._start_pos.x(), self._start_pos.y() - 10)
         self.move(start)
         self.setWindowOpacity(0.0)
 
-        self._entrance_op = QPropertyAnimation(self, b"windowOpacity")
-        self._entrance_op.setDuration(220)
-        self._entrance_op.setStartValue(0.0)
-        self._entrance_op.setEndValue(1.0)
-        self._entrance_op.setEasingCurve(QEasingCurve.OutCubic)
+        self._op_anim = QPropertyAnimation(self, b"windowOpacity")
+        self._op_anim.setDuration(180)
+        self._op_anim.setStartValue(0.0)
+        self._op_anim.setEndValue(1.0)
+        self._op_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        self._entrance_pos = QPropertyAnimation(self, b"pos")
-        self._entrance_pos.setDuration(260)
-        self._entrance_pos.setStartValue(start)
-        self._entrance_pos.setEndValue(end)
-        self._entrance_pos.setEasingCurve(QEasingCurve.OutBack)
+        self._pos_anim = QPropertyAnimation(self, b"pos")
+        self._pos_anim.setDuration(200)
+        self._pos_anim.setStartValue(start)
+        self._pos_anim.setEndValue(self._start_pos)
+        self._pos_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        self._entrance_op.start()
-        self._entrance_pos.start()
+        self._op_anim.start()
+        self._pos_anim.start()
 
     def _start_shake(self):
-        start_pos = self.pos()
-        self._shake_anim = QPropertyAnimation(self, b"pos")
-        self._shake_anim.setDuration(380)
-        self._shake_anim.setLoopCount(2)
-        self._shake_anim.setEasingCurve(QEasingCurve.OutQuad)
+        sp = self.pos()
+        self._shake = QPropertyAnimation(self, b"pos")
+        self._shake.setDuration(300)
+        self._shake.setKeyValueAt(0.00, sp)
+        self._shake.setKeyValueAt(0.15, QPoint(sp.x() - 8, sp.y()))
+        self._shake.setKeyValueAt(0.35, QPoint(sp.x() + 8, sp.y()))
+        self._shake.setKeyValueAt(0.55, QPoint(sp.x() - 5, sp.y()))
+        self._shake.setKeyValueAt(0.75, QPoint(sp.x() + 3, sp.y()))
+        self._shake.setKeyValueAt(1.00, sp)
+        self._shake.start()
 
-        self._shake_anim.setKeyValueAt(0.0, start_pos)
-        self._shake_anim.setKeyValueAt(0.25, QPoint(start_pos.x() - 10, start_pos.y()))
-        self._shake_anim.setKeyValueAt(0.5, QPoint(start_pos.x() + 10, start_pos.y()))
-        self._shake_anim.setKeyValueAt(0.75, QPoint(start_pos.x() - 6, start_pos.y()))
-        self._shake_anim.setKeyValueAt(1.0, start_pos)
-        self._shake_anim.start()
-
-    def _update_confetti(self):
-        for p in self._particles:
-            p["y"] += p["speed"]
-            p["rotation"] = (p["rotation"] + p["rot_speed"]) % 360.0
-            if p["y"] > self.height() + 90:
-                p["y"] = random.randint(-150, -20)
-                p["x"] = random.randint(0, self.width())
-                p["speed"] = random.uniform(2.2, 6.0)
-        self.update()
-
-    def _update_glitch(self):
-        self._glitch_offset = random.randint(-6, 6)
-        self.update()
-        QTimer.singleShot(50, lambda: setattr(self, "_glitch_offset", 0))
-
-    # Ribbon property for animation
-    def _get_ribbon_angle(self):
-        return self._ribbon_angle
-
-    def _set_ribbon_angle(self, angle):
-        self._ribbon_angle = angle
-        self.update()
-
-    ribbon_angle = Property(float, _get_ribbon_angle, _set_ribbon_angle)
-
-    # ------------------------------
-    # Painting
-    # ------------------------------
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
-
-        # Dim background
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 70))
-
-        # ✅ Only success/info has celebration effects
-        if self._icon_type == QMessageBox.Information:
-            self._draw_ribbons(painter)
-            self._draw_confetti(painter)
-
-        # Optional glitch shift
-        if self._glitch_offset != 0:
-            painter.save()
-            painter.translate(self._glitch_offset, 0)
-
-        # Glass card paint - Light mode only
-        card_rect = self.card.geometry()
-        self._paint_glass_card(painter, card_rect)
-
-        if self._glitch_offset != 0:
-            painter.restore()
-
-        painter.end()
-        super().paintEvent(event)
-
-    def _paint_glass_card(self, painter: QPainter, card_rect: QRect):
-        # Light mode glass card
-        grad = QLinearGradient(card_rect.topLeft(), card_rect.bottomRight())
-        grad.setColorAt(0, QColor(255, 255, 255, 245))
-        grad.setColorAt(1, QColor(240, 248, 255, 250))
-        
-        border_color = QColor(37, 99, 235, 60)  # Blue with low opacity
-        glow_color = QColor(37, 99, 235, 15)   # Very subtle blue glow
-        top_highlight = QColor(255, 255, 255, 180)
-
-        painter.setBrush(QBrush(grad))
-        painter.setPen(QPen(border_color, 2))
-        painter.drawRoundedRect(card_rect, 22, 22)
-
-        # Inner glow
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(glow_color))
-        painter.drawRoundedRect(card_rect.adjusted(5, 5, -5, -5), 16, 16)
-
-        # Top highlight line
-        painter.setPen(QPen(top_highlight, 1.5))
-        painter.drawLine(
-            card_rect.left() + 18, card_rect.top() + 6,
-            card_rect.right() - 18, card_rect.top() + 6
-        )
-
-    def _draw_ribbons(self, painter: QPainter):
-        center_x = self.width() // 2
-        center_y = 26
-
-        painter.save()
-        painter.translate(center_x, center_y)
-
-        ribbon_colors = [
-            QColor(59, 130, 246, 160),   # Blue
-            QColor(239, 68, 68, 160),    # Red
-            QColor(34, 197, 94, 160),    # Green
-            QColor(168, 85, 247, 160),   # Purple
-        ]
-
-        for i, color in enumerate(ribbon_colors):
-            angle = self._ribbon_angle + (i * 90)
-            painter.save()
-            painter.rotate(angle)
-
-            path = QPainterPath()
-            path.moveTo(0, 0)
-            for t in range(0, 121, 10):
-                x = t * 2
-                y = 34 * math.sin(math.radians(t * 2 + angle))
-                path.lineTo(x, y)
-
-            painter.setPen(QPen(color, 9, Qt.SolidLine, Qt.RoundCap))
-            painter.drawPath(path)
-            painter.restore()
-
-        painter.restore()
-
-    def _draw_confetti(self, painter: QPainter):
-        for p in self._particles:
-            painter.save()
-            painter.translate(p["x"], p["y"])
-            painter.rotate(p["rotation"])
-
-            painter.setBrush(QBrush(p["color"]))
-            painter.setPen(Qt.NoPen)
-
-            s = p["size"]
-            if p["shape"] == "rect":
-                painter.drawRect(-s // 2, -s // 2, s, max(2, s // 2))
-            else:
-                painter.drawEllipse(-s // 2, -s // 2, s, s)
-
-            painter.restore()
-
-    # ------------------------------
-    # Styles / positioning
-    # ------------------------------
-    def _apply_styles(self):
-        # Light mode only styles
-        self.setStyleSheet("""
-            QLabel { 
-                background: transparent; 
-                color: #0f172a;
-            }
-            QLabel#RibbonCard {
-                background: transparent;
-            }
-            QPushButton {
-                background: white;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                padding: 8px 18px;
-                font-weight: 700;
-                color: #0f172a;
-            }
-            QPushButton:hover {
-                background: #f8fafc;
-                border: 1px solid #2563eb;
-                color: #0f172a;
-            }
-            QPushButton:pressed {
-                background: #f1f5f9;
-            }
-        """)
-
+    # ─────────────────────────────────────────
+    #  Positioning / dismiss
+    # ─────────────────────────────────────────
     def showEvent(self, event):
         super().showEvent(event)
         self._center_on_parent()
+        if self._overlay and self.parent():
+            self._overlay.setGeometry(self.parent().rect())
+            self._overlay.raise_()
+            self.raise_()
 
     def _center_on_parent(self):
         if not self.parent():
             return
-        parent_geo = self.parent().geometry()
+        pg = self.parent().geometry()
         self.move(
-            parent_geo.center().x() - self.width() // 2,
-            parent_geo.center().y() - self.height() // 2
+            pg.x() + pg.width()  // 2 - self.width()  // 2,
+            pg.y() + pg.height() // 2 - self.height() // 2,
         )
 
-    # ------------------------------
-    # Close / click
-    # ------------------------------
     def _stop_effects(self):
-        for name in ("_ribbon_anim", "_confetti_timer", "_glitch_timer", "_shake_anim",
-                     "_entrance_op", "_entrance_pos", "_exit_anim"):
+        for name in ("_op_anim", "_pos_anim", "_shake", "_exit_anim"):
             obj = getattr(self, name, None)
-            if obj is None:
-                continue
-            try:
-                obj.stop()
-            except Exception:
-                pass
+            if obj:
+                try: obj.stop()
+                except Exception: pass
 
-    def _on_clicked(self, btn):
-        self._clicked = btn
+    def _dismiss(self):
         self._stop_effects()
-
         self._exit_anim = QPropertyAnimation(self, b"windowOpacity")
-        self._exit_anim.setDuration(170)
+        self._exit_anim.setDuration(130)
         self._exit_anim.setStartValue(self.windowOpacity())
         self._exit_anim.setEndValue(0.0)
         self._exit_anim.setEasingCurve(QEasingCurve.InCubic)
-        self._exit_anim.finished.connect(self.accept)
+
+        def _finish():
+            if self._overlay:
+                self._overlay.fade_out(done_cb=lambda: (
+                    self._overlay.deleteLater(),
+                    self.accept()
+                ))
+            else:
+                self.accept()
+
+        self._exit_anim.finished.connect(_finish)
         self._exit_anim.start()
+
+    def _on_clicked(self, btn):
+        self._clicked = btn
+        self._dismiss()
 
     def reject(self):
         self._clicked = QMessageBox.Cancel
         self._stop_effects()
-        super().reject()
+        if self._overlay:
+            self._overlay.fade_out(done_cb=lambda: (
+                self._overlay.deleteLater(),
+                super(RibbonMessageBox, self).reject()
+            ))
+        else:
+            super().reject()
 
     def clicked_button(self):
         return self._clicked
 
     @staticmethod
     def _expand_buttons(buttons):
-        order = [QMessageBox.Ok, QMessageBox.Yes, QMessageBox.No, QMessageBox.Cancel, QMessageBox.Close]
+        order = [
+            QMessageBox.Ok, QMessageBox.Yes, QMessageBox.No,
+            QMessageBox.Cancel, QMessageBox.Close
+        ]
         return [b for b in order if buttons & b] or [QMessageBox.Ok]
 
     @staticmethod
     def _std_btn_text(b):
         return {
-            QMessageBox.Ok: "OK",
-            QMessageBox.Yes: "Yes",
-            QMessageBox.No: "No",
+            QMessageBox.Ok:     "OK",
+            QMessageBox.Yes:    "Yes",
+            QMessageBox.No:     "No",
             QMessageBox.Cancel: "Cancel",
-            QMessageBox.Close: "Close",
+            QMessageBox.Close:  "Close",
         }.get(b, "OK")
 
 
-def show_glass_message(parent, title, text, icon=QMessageBox.Information, buttons=QMessageBox.Ok):
+# ──────────────────────────────────────────────────────────────
+#  Public helper
+# ──────────────────────────────────────────────────────────────
+def show_glass_message(
+    parent,
+    title: str,
+    text: str,
+    icon=QMessageBox.Information,
+    buttons=QMessageBox.Ok,
+) -> QMessageBox.StandardButton:
     """
-    Helper wrapper - Light mode only.
-    Returns clicked QMessageBox.StandardButton
+    Show a light-theme native-style dialog with dimmed backdrop.
+    Returns the clicked QMessageBox.StandardButton.
+
+    Examples:
+        show_glass_message(self, "Lab Created",
+                           "Lab 'CUL' was created with 42 workstations.")
+
+        show_glass_message(self, "Low Disk Space",
+                           "Less than 2 GB free on the server.",
+                           icon=QMessageBox.Warning)
+
+        result = show_glass_message(
+            self, "Delete Lab?",
+            "All workstation configs will be permanently removed.",
+            icon=QMessageBox.Question,
+            buttons=QMessageBox.Yes | QMessageBox.No,
+        )
+        if result == QMessageBox.Yes:
+            self.delete_lab()
+
+        show_glass_message(self, "Sync Failed",
+                           "Cannot reach the Ansible controller.",
+                           icon=QMessageBox.Critical)
     """
     dlg = RibbonMessageBox(
-        parent=parent,
-        title=title,
-        text=text,
-        icon=icon,
-        buttons=buttons,
+        parent=parent, title=title, text=text, icon=icon, buttons=buttons
     )
     dlg.exec()
     return dlg.clicked_button()
 
 
 __all__ = ["RibbonMessageBox", "show_glass_message"]
+
+
+# ──────────────────────────────────────────────────────────────
+#  Demo
+# ──────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import sys
+
+    app = QApplication(sys.argv)
+
+    win = QMainWindow()
+    win.setWindowTitle("SYNC Lab Manager — Dialog Demo")
+    win.resize(960, 620)
+
+    central = QWidget()
+    win.setCentralWidget(central)
+    layout = QVBoxLayout(central)
+    layout.setAlignment(Qt.AlignCenter)
+    layout.setSpacing(10)
+    central.setStyleSheet("background: #f0f2f5;")   # light app bg
+
+    scenarios = [
+        (
+            "ℹ  Information",
+            "Lab Created",
+            "Lab 'CUL' has been created with 42 workstations\nand IP range 10.10.20.1 – 10.10.20.42.",
+            QMessageBox.Information,
+            QMessageBox.Ok,
+        ),
+        (
+            "⚠  Warning",
+            "Low Disk Space",
+            "The server has less than 2 GB of free disk space.\nConsider removing old snapshots.",
+            QMessageBox.Warning,
+            QMessageBox.Ok | QMessageBox.Cancel,
+        ),
+        (
+            "?  Question",
+            "Delete Lab 'CSL 1 & 2'?",
+            "All 99 workstation configurations will be permanently\nremoved. This action cannot be undone.",
+            QMessageBox.Question,
+            QMessageBox.Yes | QMessageBox.No,
+        ),
+        (
+            "✕  Critical",
+            "Sync Failed",
+            "Unable to reach the remote Ansible controller.\nCheck your network connection and try again.",
+            QMessageBox.Critical,
+            QMessageBox.Close,
+        ),
+    ]
+
+    for label, title, text, icon, btns in scenarios:
+        btn = QPushButton(label)
+        btn.setFixedSize(220, 36)
+        btn.setFont(QFont("Segoe UI", 10))
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: white;
+                border: 1px solid #d0d4da;
+                border-radius: 7px;
+                color: #333;
+            }
+            QPushButton:hover {
+                background: #f5f5f5;
+                border-color: #b0b4ba;
+            }
+        """)
+        btn.clicked.connect(
+            lambda _, t=title, tx=text, ic=icon, b=btns:
+                show_glass_message(win, t, tx, ic, b)
+        )
+        layout.addWidget(btn)
+
+    win.show()
+    sys.exit(app.exec())
