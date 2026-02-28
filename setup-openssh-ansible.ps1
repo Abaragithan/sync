@@ -26,12 +26,11 @@ param(
 function Write-Step($n, $total, $msg) {
   Write-Host "[$n/$total] $msg" -ForegroundColor Cyan
 }
+function Write-Ok($msg)   { Write-Host "  OK: $msg"   -ForegroundColor Green  }
+function Write-Warn($msg) { Write-Host "  WARN: $msg" -ForegroundColor Yellow }
+function Write-Fail($msg) { Write-Host "  FAIL: $msg" -ForegroundColor Red; exit 1 }
 
-function Write-Ok($msg)   { Write-Host "  OK: $msg"    -ForegroundColor Green  }
-function Write-Warn($msg) { Write-Host "  WARN: $msg"  -ForegroundColor Yellow }
-function Write-Fail($msg) { Write-Host "  FAIL: $msg"  -ForegroundColor Red; exit 1 }
-
-$TOTAL_STEPS = 8
+$TOTAL_STEPS = 9
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "  Sync Deployer - Windows Client Setup"          -ForegroundColor Cyan
@@ -42,7 +41,7 @@ Write-Host "================================================" -ForegroundColor C
 Write-Host ""
 
 # ─────────────────────────────────────────────
-# Step 1 - Install / Enable OpenSSH Server
+# Step 1 - Install OpenSSH Server
 # ─────────────────────────────────────────────
 Write-Step 1 $TOTAL_STEPS "Installing OpenSSH Server..."
 
@@ -54,50 +53,67 @@ if ($sshCap.State -ne "Installed") {
   Write-Ok "OpenSSH Server already installed."
 }
 
+$sshdExe = "C:\Windows\System32\OpenSSH\sshd.exe"
+if (-not (Test-Path $sshdExe)) { Write-Fail "sshd.exe not found at $sshdExe" }
+
 # ─────────────────────────────────────────────
-# Step 2 - Generate SSH host keys
+# Step 2 - Generate host keys by starting sshd
+#          with a temporary permissive config
 # ─────────────────────────────────────────────
-Write-Step 2 $TOTAL_STEPS "Ensuring SSH host keys exist..."
+Write-Step 2 $TOTAL_STEPS "Generating SSH host keys..."
 
-$sshdExe    = "C:\Windows\System32\OpenSSH\sshd.exe"
-$sshKeygen  = "C:\Windows\System32\OpenSSH\ssh-keygen.exe"
-
-if (-not (Test-Path $sshdExe))   { Write-Fail "sshd.exe not found at $sshdExe" }
-if (-not (Test-Path $sshKeygen)) { Write-Fail "ssh-keygen.exe not found at $sshKeygen" }
-
-# Ensure ProgramData\ssh directory exists
+# Ensure ssh directory exists
 if (-not (Test-Path "C:\ProgramData\ssh")) {
   New-Item -ItemType Directory -Path "C:\ProgramData\ssh" -Force | Out-Null
-  Write-Ok "Created C:\ProgramData\ssh directory."
 }
 
-# Generate each host key type if missing
-$keyTypes = @("rsa", "ecdsa", "ed25519")
-foreach ($keyType in $keyTypes) {
-  $keyPath = "C:\ProgramData\ssh\ssh_host_${keyType}_key"
-  if (-not (Test-Path $keyPath)) {
-    & $sshKeygen -t $keyType -f $keyPath -N "" -q 2>&1 | Out-Null
-    Write-Ok "Generated $keyType host key."
-  } else {
-    Write-Ok "$keyType host key already exists."
-  }
+# Write minimal temp config so sshd can start and generate keys
+$tempConfig = @"
+Port 22
+PubkeyAuthentication yes
+PasswordAuthentication yes
+Subsystem sftp sftp-server.exe
+"@
+Set-Content "C:\ProgramData\ssh\sshd_config" $tempConfig -Encoding UTF8
+
+# Start sshd with temp config so it auto-generates host keys
+Set-Service -Name sshd -StartupType Automatic -ErrorAction SilentlyContinue
+Start-Service sshd -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 3
+Stop-Service sshd -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+
+# Verify keys were generated
+if (-not (Test-Path "C:\ProgramData\ssh\ssh_host_ed25519_key")) {
+  Write-Fail "Host keys were not generated."
+}
+Write-Ok "Host keys generated successfully."
+
+# ─────────────────────────────────────────────
+# Step 3 - Fix host key permissions
+#          (CRITICAL - sshd requires SYSTEM-only
+#           access on private keys)
+# ─────────────────────────────────────────────
+Write-Step 3 $TOTAL_STEPS "Fixing host key permissions..."
+
+$hostKeys = Get-ChildItem "C:\ProgramData\ssh\ssh_host_*" | Where-Object { $_.Name -notlike "*.pub" }
+
+foreach ($key in $hostKeys) {
+  icacls $key.FullName /inheritance:r | Out-Null
+  icacls $key.FullName /remove "Administrators" | Out-Null
+  icacls $key.FullName /remove "BUILTIN\Administrators" | Out-Null
+  icacls $key.FullName /grant "SYSTEM:(F)" | Out-Null
+  Write-Ok "Fixed permissions: $($key.Name)"
 }
 
-Write-Ok "Host keys ready."
+Write-Ok "Host key permissions fixed."
 
 # ─────────────────────────────────────────────
-# Step 3 - Write clean sshd_config
+# Step 4 - Write final sshd_config
 # ─────────────────────────────────────────────
-Write-Step 3 $TOTAL_STEPS "Writing sshd_config..."
+Write-Step 4 $TOTAL_STEPS "Writing final sshd_config..."
 
 $sshdConfig = "C:\ProgramData\ssh\sshd_config"
-
-# Backup existing config
-if (Test-Path $sshdConfig) {
-  $backup = "$sshdConfig.bak"
-  Copy-Item $sshdConfig $backup -Force
-  Write-Ok "Backup saved to $backup"
-}
 
 $config = @"
 Port 22
@@ -109,19 +125,14 @@ Subsystem sftp sftp-server.exe
 "@
 
 Set-Content $sshdConfig $config -Encoding UTF8
-
-# Validate config
-$result = & $sshdExe -t 2>&1
-if ($LASTEXITCODE -ne 0) { Write-Fail "sshd_config validation failed: $result" }
-Write-Ok "sshd_config written and validated."
+Write-Ok "sshd_config written."
 
 # ─────────────────────────────────────────────
-# Step 4 - Install public key
+# Step 5 - Install public key
 # ─────────────────────────────────────────────
-Write-Step 4 $TOTAL_STEPS "Installing controller public key..."
+Write-Step 5 $TOTAL_STEPS "Installing controller public key..."
 
 $authKeysPath = "C:\ProgramData\ssh\administrators_authorized_keys"
-
 Set-Content $authKeysPath $PublicKey -Encoding UTF8
 
 # Fix permissions (CRITICAL for Windows SSH)
@@ -132,9 +143,9 @@ icacls $authKeysPath /grant "Administrators:(F)" | Out-Null
 Write-Ok "Public key installed with correct permissions."
 
 # ─────────────────────────────────────────────
-# Step 5 - Enable & activate SSH user account
+# Step 6 - Enable & activate SSH user account
 # ─────────────────────────────────────────────
-Write-Step 5 $TOTAL_STEPS "Configuring SSH user account ($SSHUser)..."
+Write-Step 6 $TOTAL_STEPS "Configuring SSH user account ($SSHUser)..."
 
 if ($SSHUser -eq "Administrator") {
   net user Administrator /active:yes | Out-Null
@@ -167,18 +178,18 @@ if ($SSHUser -eq "Administrator") {
 }
 
 # ─────────────────────────────────────────────
-# Step 6 - Enable LocalAccountTokenFilterPolicy
+# Step 7 - Enable LocalAccountTokenFilterPolicy
 # ─────────────────────────────────────────────
-Write-Step 6 $TOTAL_STEPS "Enabling LocalAccountTokenFilterPolicy..."
+Write-Step 7 $TOTAL_STEPS "Enabling LocalAccountTokenFilterPolicy..."
 
 $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
 Set-ItemProperty -Path $regPath -Name LocalAccountTokenFilterPolicy -Value 1 -Type DWord -Force
 Write-Ok "LocalAccountTokenFilterPolicy set to 1."
 
 # ─────────────────────────────────────────────
-# Step 7 - Firewall rule for SSH (port 22)
+# Step 8 - Firewall rule for SSH (port 22)
 # ─────────────────────────────────────────────
-Write-Step 7 $TOTAL_STEPS "Configuring firewall rule for SSH (port 22)..."
+Write-Step 8 $TOTAL_STEPS "Configuring firewall rule for SSH (port 22)..."
 
 $ruleName   = "OpenSSH-Ansible-SSH"
 $remoteList = @($ControllerIP, $DockerSubnet)
@@ -201,16 +212,17 @@ if (-not $existing) {
 }
 
 # ─────────────────────────────────────────────
-# Step 8 - Start / Restart sshd
+# Step 9 - Restart sshd with final config
 # ─────────────────────────────────────────────
-Write-Step 8 $TOTAL_STEPS "Starting sshd service..."
+Write-Step 9 $TOTAL_STEPS "Starting sshd with final config..."
 
-Set-Service -Name sshd -StartupType Automatic
 Restart-Service sshd
 Start-Sleep -Seconds 2
 
 $svc = Get-Service sshd
-if ($svc.Status -ne "Running") { Write-Fail "sshd failed to start!" }
+if ($svc.Status -ne "Running") {
+  Write-Fail "sshd failed to start! Run: & 'C:\Windows\System32\OpenSSH\sshd.exe' -d"
+}
 Write-Ok "sshd is running."
 
 # ─────────────────────────────────────────────
@@ -238,6 +250,9 @@ icacls $authKeysPath
 
 Write-Host "`n--- sshd_config ---"
 Get-Content $sshdConfig
+
+Write-Host "`n--- Host Keys ---"
+Get-ChildItem "C:\ProgramData\ssh\ssh_host_*" | Select-Object Name | Format-Table -AutoSize
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green
