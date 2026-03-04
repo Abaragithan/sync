@@ -1,3 +1,13 @@
+# Check current state first
+Get-WindowsCapability -Online | Where-Object Name -like "OpenSSH.Server*"
+
+# Install it
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+
+# Verify installation
+Get-WindowsCapability -Online | Where-Object Name -like "OpenSSH.Server*"
+
+
 # setup-windows-client.ps1
 # Run as Administrator (elevated PowerShell)
 # Usage:
