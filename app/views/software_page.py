@@ -1,3 +1,4 @@
+# views/software_page.py
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
@@ -51,7 +52,7 @@ LIGHT = {
 }
 
 def _t() -> dict:
-    return LIGHT  # Always return light mode
+    return LIGHT
 
 
 # =============================================================================
@@ -262,7 +263,6 @@ class SoftwarePage(QWidget):
     # UI construction
     # =========================================================================
     def _build_ui(self):
-        # Set fixed background color for the whole page
         self.setAutoFillBackground(True)
         palette = self.palette()
         palette.setColor(QPalette.Window, QColor("#f8fafc"))
@@ -547,9 +547,6 @@ class SoftwarePage(QWidget):
     # Real Ansible execution
     # =========================================================================
     def _run_ansible(self, payload: dict):
-        """
-        Builds the exact Docker command your README documents, using sync-ansible:latest.
-        """
         os_name = payload.get("os", self.state.target_os)
         action  = payload.get("action", self.state.action)
         targets = payload.get("targets", self.state.selected_targets)
@@ -569,18 +566,45 @@ class SoftwarePage(QWidget):
             "target_host": target_host,
         }
 
+        # ── Windows Install ───────────────────────────────────────────────────
         if action == "install" and os_name == "windows":
+            choco_pkg = payload.get("choco_package", "").strip()
             file_path = payload.get("file", "").strip()
-            if not file_path:
-                self.log_panel.append_line("✗ No installer file specified.", "error")
+
+            if not choco_pkg and not file_path:
+                self.log_panel.append_line(
+                    "✗ Enter a Chocolatey package name or select a local installer file.", "error"
+                )
                 self._on_execution_finished(ok=False)
                 return
-            file_name = os.path.basename(file_path)
-            extra["file_name"] = file_name
-            self._ensure_in_repo(file_path, sw_repo)
-            if payload.get("args", "").strip():
-                extra["custom_install_args"] = payload["args"].strip()
 
+            if choco_pkg:
+                extra["choco_package"] = choco_pkg
+            else:
+                file_name = os.path.basename(file_path)
+                extra["file_name"] = file_name
+                self._ensure_in_repo(file_path, sw_repo)
+                if payload.get("args", "").strip():
+                    extra["custom_install_args"] = payload["args"].strip()
+
+        # ── Windows Remove ────────────────────────────────────────────────────
+        elif action == "remove" and os_name == "windows":
+            choco_pkg = payload.get("choco_package", "").strip()
+            app_name  = payload.get("app_name", "").strip()
+
+            if not choco_pkg and not app_name:
+                self.log_panel.append_line(
+                    "✗ Enter a Chocolatey package name or an application display name.", "error"
+                )
+                self._on_execution_finished(ok=False)
+                return
+
+            if choco_pkg:
+                extra["choco_package"] = choco_pkg
+            else:
+                extra["app_name"] = app_name
+
+        # ── Linux Install ─────────────────────────────────────────────────────
         elif action == "install" and os_name == "linux":
             pkgs = payload.get("packages", "").strip()
             if not pkgs:
@@ -589,14 +613,7 @@ class SoftwarePage(QWidget):
                 return
             extra["package_name"] = pkgs
 
-        elif action == "remove" and os_name == "windows":
-            app_name = payload.get("app_name", "").strip()
-            if not app_name:
-                self.log_panel.append_line("✗ No application name specified.", "error")
-                self._on_execution_finished(ok=False)
-                return
-            extra["app_name"] = app_name
-
+        # ── Linux Remove ──────────────────────────────────────────────────────
         elif action == "remove" and os_name == "linux":
             pkgs = payload.get("packages", "").strip()
             if not pkgs:
@@ -634,7 +651,7 @@ class SoftwarePage(QWidget):
             "-v", f"{ssh_dir}:/root/.ssh:ro",
         ]
 
-        if action == "install" and os_name == "windows":
+        if action == "install" and os_name == "windows" and extra.get("file_name"):
             cmd += ["-v", f"{sw_repo}:/app/software_repo"]
 
         if os_name == "linux" and os.path.exists(vault_pass):
@@ -678,7 +695,6 @@ class SoftwarePage(QWidget):
         real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
         tmp_path    = os.path.join(ansible_dir, "inventory", "_sync_tmp_inventory.ini")
 
-        # Extract ONLY the [group:vars] section from hosts.ini
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
             with open(real_inv, "r") as f:
@@ -690,7 +706,7 @@ class SoftwarePage(QWidget):
                         group_vars_lines.append(line)
                         continue
                     if in_vars:
-                        if stripped.startswith("["):  # hit next section → stop
+                        if stripped.startswith("["):
                             in_vars = False
                         else:
                             group_vars_lines.append(line)

@@ -11,7 +11,7 @@ Form matrix
 OS       | Action   | Form class
 ---------|----------|------------------
 Windows  | install  | WinInstallForm   – file picker + silent args + reboot
-Windows  | remove   | WinRemoveForm    – display name + optional GUID + reboot
+Windows  | remove   | WinRemoveForm    – chocolatey package name + display name fallback + reboot
 Windows  | update   | WinUpdateForm    – category combo + optional KB + reboot
 Linux    | install  | LinuxInstallForm – package name(s) + flags + cache
 Linux    | remove   | LinuxRemoveForm  – package name(s) + purge + autoremove
@@ -49,6 +49,15 @@ def _field(placeholder: str = "", read_only: bool = False) -> QLineEdit:
     return w
 
 
+def _hint(text: str) -> QLabel:
+    """Small muted hint label below a field."""
+    lbl = QLabel(text)
+    lbl.setObjectName("SubText")
+    lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.2px; margin-top: -4px;")
+    lbl.setWordWrap(True)
+    return lbl
+
+
 class ValidationError(Exception):
     pass
 
@@ -70,6 +79,12 @@ class _BaseForm(QWidget):
     def _add(self, label: str, widget: QWidget) -> QWidget:
         self._layout.addWidget(_section(label))
         self._layout.addWidget(widget)
+        return widget
+
+    def _add_with_hint(self, label: str, widget: QWidget, hint: str) -> QWidget:
+        self._layout.addWidget(_section(label))
+        self._layout.addWidget(widget)
+        self._layout.addWidget(_hint(hint))
         return widget
 
     def _add_row(self, label: str, *widgets) -> None:
@@ -112,6 +127,23 @@ class _BaseForm(QWidget):
 class WinInstallForm(_BaseForm):
     def __init__(self):
         super().__init__()
+
+        # ── Chocolatey install (primary) ──
+        self.choco_input = _field("e.g.  vlc  notepadplusplus  7zip  git")
+        self._add_with_hint(
+            "Chocolatey Package Name(s)  (recommended)",
+            self.choco_input,
+            "Separate multiple packages with spaces. Find names at chocolatey.org/packages",
+        )
+
+        # ── Divider label ──
+        or_lbl = QLabel("── or install from a local file ──")
+        or_lbl.setObjectName("SubText")
+        or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
+        or_lbl.setAlignment(Qt.AlignCenter)
+        self._layout.addWidget(or_lbl)
+
+        # ── Local file install (fallback) ──
         self.file_input = _field("No file selected…", read_only=True)
         browse_btn = QPushButton("Browse…")
         browse_btn.setObjectName("SecondaryBtn")
@@ -120,7 +152,7 @@ class WinInstallForm(_BaseForm):
         self._add_row("Installer File  (.exe / .msi)", self.file_input, browse_btn)
 
         self.args_input = _field("/S  /quiet  /norestart")
-        self._add("Silent Install Arguments  (optional)", self.args_input)
+        self._add("Silent Install Arguments  (optional – for local file only)", self.args_input)
 
         self.reboot_cb = self._add_check("Reboot targets after installation")
         self._layout.addStretch()
@@ -134,48 +166,70 @@ class WinInstallForm(_BaseForm):
             self.file_input.setText(path)
 
     def reset(self):
+        self.choco_input.clear()
         self.file_input.clear()
         self.args_input.clear()
         self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
-        f = self.file_input.text().strip()
-        if not f:
-            raise ValidationError("No installer file selected.")
+        choco = self.choco_input.text().strip()
+        f     = self.file_input.text().strip()
+        if not choco and not f:
+            raise ValidationError("Enter a Chocolatey package name or select a local installer file.")
         return {
             "os": "windows", "action": "install",
-            "file": f,
-            "args": self.args_input.text().strip(),
-            "reboot": self.reboot_cb.isChecked(),
+            "choco_package": choco,
+            "file":          f,
+            "args":          self.args_input.text().strip(),
+            "reboot":        self.reboot_cb.isChecked(),
         }
 
 
 class WinRemoveForm(_BaseForm):
     def __init__(self):
         super().__init__()
-        self.name_input = _field("e.g.  VLC media player")
-        self._add("Application Display Name", self.name_input)
 
-        self.guid_input = _field("{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}")
-        self._add("Product GUID  (optional – improves accuracy)", self.guid_input)
+        # ── Chocolatey uninstall (primary) ──
+        self.choco_input = _field("e.g.  vlc  notepadplusplus  7zip  git")
+        self._add_with_hint(
+            "Chocolatey Package Name(s)  (recommended)",
+            self.choco_input,
+            "Separate multiple packages with spaces. Find names at chocolatey.org/packages",
+        )
+
+        # ── Divider label ──
+        or_lbl = QLabel("── or remove by display name ──")
+        or_lbl.setObjectName("SubText")
+        or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
+        or_lbl.setAlignment(Qt.AlignCenter)
+        self._layout.addWidget(or_lbl)
+
+        # ── Registry / display name fallback ──
+        self.name_input = _field("e.g.  VLC media player")
+        self._add_with_hint(
+            "Application Display Name  (fallback)",
+            self.name_input,
+            "Used only when no Chocolatey name is given. Must match the name shown in Add/Remove Programs.",
+        )
 
         self.reboot_cb = self._add_check("Reboot targets after removal")
         self._layout.addStretch()
 
     def reset(self):
+        self.choco_input.clear()
         self.name_input.clear()
-        self.guid_input.clear()
         self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
-        n = self.name_input.text().strip()
-        if not n:
-            raise ValidationError("Application display name is required.")
+        choco = self.choco_input.text().strip()
+        name  = self.name_input.text().strip()
+        if not choco and not name:
+            raise ValidationError("Enter a Chocolatey package name or an application display name.")
         return {
             "os": "windows", "action": "remove",
-            "name": n,
-            "guid": self.guid_input.text().strip(),
-            "reboot": self.reboot_cb.isChecked(),
+            "choco_package": choco,
+            "app_name":      name,
+            "reboot":        self.reboot_cb.isChecked(),
         }
 
 
@@ -316,3 +370,5 @@ _REGISTRY = {
 def get_form(os_name: str, action: str):
     cls = _REGISTRY.get((os_name.lower(), action.lower()))
     return cls() if cls else None
+    
+  
