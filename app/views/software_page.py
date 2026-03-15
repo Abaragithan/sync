@@ -13,6 +13,7 @@ from views.action_forms import get_form
 from core.ansible_worker import AnsibleWorker
 
 import os
+import sys
 
 # ── progress step registry ──────────────────────────────────────────────────
 _STEPS = [
@@ -53,6 +54,21 @@ LIGHT = {
 
 def _t() -> dict:
     return LIGHT
+
+
+def _get_project_root() -> str:
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        project_root = os.path.abspath(os.path.join(exe_dir, ".."))
+    else:
+        here = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(here, "..", ".."))
+
+    ansible_dir = os.path.join(project_root, "ansible")
+    if not os.path.exists(ansible_dir):
+        print(f"[WARNING] ansible/ folder not found at: {project_root}")
+
+    return project_root
 
 
 # =============================================================================
@@ -272,7 +288,6 @@ class SoftwarePage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # chrome
         self._chrome = QFrame()
         self._chrome.setFixedHeight(112)
         self._chrome.setAutoFillBackground(True)
@@ -291,14 +306,12 @@ class SoftwarePage(QWidget):
         chrome_layout.addWidget(self.progress_bar)
         root.addWidget(self._chrome)
 
-        # two-panel content
         content_area = QWidget()
         content_area.setAutoFillBackground(True)
         content_layout = QHBoxLayout(content_area)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # LEFT scroll
         left_scroll = QScrollArea()
         left_scroll.setObjectName("SWFormScroll")
         self._left_scroll = left_scroll
@@ -551,8 +564,7 @@ class SoftwarePage(QWidget):
         action  = payload.get("action", self.state.action)
         targets = payload.get("targets", self.state.selected_targets)
 
-        here         = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.abspath(os.path.join(here, "..", ".."))
+        project_root = _get_project_root()
         ssh_dir      = os.path.expanduser("~/.ssh")
         vault_pass   = os.path.expanduser("~/.ansible_vault_pass")
         sw_repo      = os.path.join(project_root, "software_repo")
@@ -622,6 +634,7 @@ class SoftwarePage(QWidget):
                 return
             extra["package_name"] = pkgs
 
+        # ── Write temp inventory ──────────────────────────────────────────────
         tmp_inv = self._write_temp_inventory(
             project_root, targets, os_name, target_host
         )
@@ -630,10 +643,12 @@ class SoftwarePage(QWidget):
             self._on_execution_finished(ok=False)
             return
 
-        inv_rel = os.path.relpath(
-            tmp_inv,
-            os.path.join(project_root, "ansible")
-        )
+        self.log_panel.append_line(f"  DEBUG tmp_inv: {tmp_inv}", "dim")
+        self.log_panel.append_line(f"  DEBUG project_root: {project_root}", "dim")
+        self.log_panel.append_line(f"  DEBUG file exists: {os.path.exists(tmp_inv)}", "dim")
+
+        # Mount tmp inventory directly into container at fixed path
+        inv_container_path = "/tmp/_sync_tmp_inventory.ini"
 
         ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
 
@@ -649,6 +664,7 @@ class SoftwarePage(QWidget):
             "docker", "run", "--rm",
             "-v", f"{project_root}:/app",
             "-v", f"{ssh_dir}:/root/.ssh:ro",
+            "-v", f"{tmp_inv}:{inv_container_path}",
         ]
 
         if action == "install" and os_name == "windows" and extra.get("file_name"):
@@ -661,7 +677,7 @@ class SoftwarePage(QWidget):
             "-w", "/app/ansible",
             "sync-ansible:latest",
             "ansible-playbook",
-            "-i", inv_rel,
+            "-i", inv_container_path,
             "playbooks/master_deploy_v2.yml",
             "-e", ev_str,
         ]
@@ -689,11 +705,13 @@ class SoftwarePage(QWidget):
         os_name: str,
         group: str,
     ) -> str | None:
-        import os
+        import tempfile
 
         ansible_dir = os.path.join(project_root, "ansible")
         real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
-        tmp_path    = os.path.join(ansible_dir, "inventory", "_sync_tmp_inventory.ini")
+
+        tmp_dir  = tempfile.gettempdir()
+        tmp_path = os.path.join(tmp_dir, "_sync_tmp_inventory.ini")
 
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
