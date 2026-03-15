@@ -157,7 +157,7 @@ class LabPage(QWidget):
         right_actions = QHBoxLayout()
         right_actions.setSpacing(12)
 
-        self.next_btn = QPushButton("Next → Software")
+        self.next_btn = QPushButton("Next")
         self.next_btn.setObjectName("PrimaryButton")
         self.next_btn.setCursor(Qt.PointingHandCursor)
         self.next_btn.setFixedHeight(42)
