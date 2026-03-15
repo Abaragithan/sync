@@ -2,7 +2,103 @@
 
 A PySide6 GUI application that triggers Ansible playbooks inside a Docker container. This dashboard provides a unified interface for managing both Windows and Linux clients.
 
-## Setup
+# Project Description
+
+## Problem Statement
+
+Managing multiple client systems across different operating systems can be complex and time-consuming when deployments are done manually. System administrators often need a centralized tool to deploy software, monitor connectivity, and automate configuration tasks.
+
+## Objectives
+
+The main objectives of this project are:
+- Provide a centralized GUI dashboard for deployment automation
+- Automate software installation across multiple systems
+- Integrate Docker and Ansible for secure automation
+- Support both Windows and Linux clients
+- Simplify infrastructure management for administrators
+
+## Target Users
+
+-System administrators
+-DevOps engineers
+-IT infrastructure teams
+-Educational labs managing multiple machines
+
+## System Overview
+
+The system provides a graphical interface that allows administrators to run automation tasks. Behind the scenes, the application launches Ansible playbooks within a Docker container, which communicates with client machines via SSH.
+
+# System Architecture
+
+## Workflow
+
+1. The user launches the Sync Dashboard application. From the dashboard, the user can create a new lab by providing the lab name, section, number of rows, number of columns, start IP address, and end IP address. Once these details are submitted, the system creates the lab and automatically generates the PCs based on the given IP range.
+
+2. After the lab is created, the user can manage it from the dashboard. If any changes are required, the user can click the Edit button to modify the lab configuration. This includes adding PCs, removing PCs, editing IP addresses, or assigning IP addresses in bulk. If no changes are required, the user can simply click Open to view the lab.
+
+3. Inside the lab view, the user selects the target PCs where the software deployment should be performed. After selecting the machines, the user clicks Next button, which redirects to the Software Manager page.
+
+4. In the Software Manager page, the user first selects the target operating system, either Windows or Linux, and then selects the action to perform such as install, remove, or update.
+
+5. For Windows deployments, the user can either provide Chocolatey package names for the required software or browse and select a local installer file such as .exe or .msi. If a local installer is used, optional silent installation arguments can be provided to run the installation without user interaction. For Linux deployments, the user simply provides the package name and the installation is performed using sudo apt through Ansible automation.
+
+6. After configuring the deployment, the user clicks the Execute button. The system then runs the deployment process using an Ansible playbook inside a Docker container, which connects to the selected PCs via SSH and performs the requested action.
+
+7. During execution, the progress is displayed in the Execution Log panel in the dashboard. This log shows the status of each operation and any errors that occur. After the process is completed, the logs can also be saved locally as a text file for future reference.
+
+## Architecture Components
+
+# GUI Layer
+  - PySide6 dashboard
+# Automation Layer
+  - Ansible Playboks
+# Container Layer
+  - Docker container running Ansible
+# Infrastructure Layer
+  - Windows clients
+  - Linux clients
+
+## Architecture Diagrams
+
+User
+  │
+  ▼
+PySide6 Dashboard
+  │
+  ▼
+Docker Container (Ansible)
+  │
+  ▼
+SSH Connections
+  │
+ ├── Windows Clients
+ └── Linux Clients
+
+# Technologies Used
+
+## Programming Languages
+  - Python
+
+## Frameworks / Libraries
+  - PySide6 (GUI framework)
+  - Ansible (automation)
+  - OpenSSH
+
+## Containerization
+  - Docker
+
+## Configuration Management
+  - Ansible Playbooks
+  - Ansible Inventory
+
+## Operating Systems
+  - Linux
+  - Windows
+
+## Security Tools
+  - SSH Key Authentication
+
+# Installation Instructions
 
 ### 1. Clone the Repository
 
@@ -399,10 +495,78 @@ Restart-Service sshd
 4. **Rotate SSH keys** regularly and update `administrators_authorized_keys` on all clients
 5. **Use dedicated service accounts** with minimal required permissions where possible
 
-## License
+# Project Structure
 
-[Add your license information here]
+sync/
+├── ansible/
+│   ├── inventory/
+│   │   └── group_vars/
+│   │       └── windows_clients/
+│   └── playbooks/
+│       └── master_deploy_v2.yml
+├── app/
+│   ├── assets/
+│   │   ├── icon.ico
+│   │   ├── icon.png
+│   │   └── pc2.png
+│   ├── core/
+│   │   ├── ansible_worker.py
+│   │   ├── app_state.py
+│   │   ├── config.py
+│   │   ├── inventory_manager.py
+│   │   └── __init__.py
+│   ├── ui/
+│   │   ├── theme.py
+│   │   └── __init__.py
+│   ├── views/
+│   │   ├── dialogs/
+│   │   │   ├── add_pc_dialog.py
+│   │   │   ├── bulk_ip_dialog.py
+│   │   │   ├── confirm_delete_dialog.py
+│   │   │   ├── create_lab_dialog.py
+│   │   │   ├── dialog_base.py
+│   │   │   ├── edit_pc_ip_dialog.py
+│   │   │   └── glass_messagebox.py
+│   │   ├── widgets/
+│   │   │   └── pc_card.py
+│   │   ├── action_forms.py
+│   │   ├── create_lab_dialog.py
+│   │   ├── dashboard_page.py
+│   │   ├── lab_edit_page.py
+│   │   ├── lab_page.py
+│   │   ├── software_controller.py
+│   │   ├── software_page.py
+│   │   ├── software_theme.py
+│   │   ├── software_widgets.py
+│   │   └── welcome_page.py
+│   ├── main.py
+│   └── __init__.py
+├── data/
+│   └── inventory.json
+├── software_repo/
+│   └── jdk-25_windows-x64_bin.msi
+├── ansible.cfg
+├── build.bat
+├── build.sh
+├── Dockerfile
+├── LICENSE
+├── README.md
+├── requirements-docker.txt
+├── requirements-gui.txt
+├── run.ps1
+├── run.sh
+└── setup-openssh-ansible.ps1
 
-## Contributing
+
+
+# Contributors
 
 [Add contribution guidelines here]
+
+# Contact Information
+
+
+
+# License
+
+[Add your license information here]
