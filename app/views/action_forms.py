@@ -670,4 +670,4 @@ _REGISTRY = {
 
 def get_form(os_name: str, action: str):
     cls = _REGISTRY.get((os_name.lower(), action.lower()))
-    return cls() if cls else None
+    return cls() if cls else None# views/action_forms.py
