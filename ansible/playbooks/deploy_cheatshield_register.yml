@@ -1,0 +1,61 @@
+---
+# deploy_cheatshield_register.yml
+#
+# Task: Register each client with its unique token
+#
+# CSV format (ansible/files/tokens.csv on controller):
+#   pcLabel,deviceId,regToken
+#   PC-001,GROUP0004-DEV0001,REG-758D039B9EB9224B
+#   PC-002,GROUP0004-DEV0002,REG-58D6E70038DCD399
+#
+# IP mapping: PC-001 -> 10.20.9.1, PC-010 -> 10.20.9.10, etc.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_register.yml
+
+- name: Register Cheat Shield with Per-PC Token
+  hosts: windows_clients
+  gather_facts: false
+
+  vars:
+    install_dir: 'C:\Downloads'
+    tokens_file: "{{ playbook_dir }}/../files/tokens.csv"
+
+  pre_tasks:
+    - name: Parse all token rows from CSV (skip header)
+      set_fact:
+        all_tokens: "{{ lookup('file', tokens_file) | split('\n') | select('match', '^PC-') | list }}"
+
+    - name: Build PC label from this host's IP (e.g. 10.20.9.1 -> PC-001)
+      set_fact:
+        pc_label: "PC-{{ '%03d' | format(inventory_hostname.split('.')[-1] | int) }}"
+
+    - name: Find matching token row for this host
+      set_fact:
+        token_row: "{{ all_tokens | select('match', pc_label + ',') | first | default('') }}"
+
+    - name: Fail if no token found for this host
+      fail:
+        msg: "No token found for {{ inventory_hostname }} ({{ pc_label }}) in tokens.csv"
+      when: token_row == ''
+
+    - name: Extract regToken from row
+      set_fact:
+        client_token: "{{ token_row.split(',')[2] }}"
+
+    - name: Show token being used
+      debug:
+        msg: "Using token {{ client_token }} for {{ inventory_hostname }} ({{ pc_label }})"
+
+  tasks:
+    - name: Run CheatShieldClient_0_1_5.exe with registration token
+      win_shell: |
+        Start-Process -FilePath "{{ install_dir }}\CheatShieldClient_0_1_5.exe" `
+          -ArgumentList "--register-cli={{ client_token }}" `
+          -Verb RunAs `
+          -Wait
+      register: register_result
+
+    - name: Show execution result
+      debug:
+        msg: "CheatShieldClient_0_1_5.exe --register-cli exited with return code: {{ register_result.rc }}"

@@ -1,0 +1,47 @@
+---
+# deploy_cheatshield_install.yml
+#
+# Task: Copy both exe files to clients and register server URL
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml
+#
+# Place the following files in ansible/files/ on the controller:
+#   - Cheat_shield.exe
+#   - <second_exe>.exe   # replace with actual name
+
+- name: Copy and Install Cheat Shield
+  hosts: windows_clients
+  gather_facts: false
+
+  vars:
+    install_dir: 'C:\Downloads'
+    server_url: 'https://cheatshield-dcs.vercel.app'
+    exe_files:
+      - CheatShieldClient_0_1_5.exe
+      - nssm.exe       # TODO: replace with actual second exe name
+
+  tasks:
+    - name: Ensure install directory exists
+      win_file:
+        path: "{{ install_dir }}"
+        state: directory
+
+    - name: Copy exe files to client
+      win_copy:
+        src: "{{ playbook_dir }}/../files/{{ item }}"
+        dest: "{{ install_dir }}\\{{ item }}"
+        force: yes
+      loop: "{{ exe_files }}"
+
+    - name: Run CheatShieldClient_0_1_5.exe with server URL
+      win_shell: |
+        Start-Process -FilePath "{{ install_dir }}\CheatShieldClient_0_1_5.exe" `
+          -ArgumentList "--server-url {{ server_url }}" `
+          -Verb RunAs `
+          -Wait
+      register: install_result
+
+    - name: Show execution result
+      debug:
+        msg: "CheatShieldClient_0_1_5.exe exited with return code: {{ install_result.rc }}"
