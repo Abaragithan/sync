@@ -114,6 +114,10 @@ EOF'
 # Save vault password securely
 echo "your-vault-password" > ~/.ansible_vault_pass
 chmod 600 ~/.ansible_vault_pass
+
+
+# copy the public key to client
+ssh-copy-id -i ~/.ssh/id_ed25519.pub <user-name>@<clinet_ip>
 ```
 
 ## Inventory Configuration
