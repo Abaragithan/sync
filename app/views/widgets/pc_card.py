@@ -12,25 +12,24 @@ def _abs_asset_path(rel_path: str) -> str:
 
 class PcCard(QFrame):
     toggled = Signal(str, bool)
-    delete_requested = Signal(str)  # keep for compatibility with your lab_page.py
+    delete_requested = Signal(str)
 
-    NORMAL_COLOR = "#9F9F9F"
+    NORMAL_COLOR   = "#9F9F9F"
     SELECTED_COLOR = "#007acc"
+    ONLINE_COLOR   = "#22c55e"   # green
+    OFFLINE_COLOR  = "#ef4444"   # red
 
     def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc2.png"):
         super().__init__()
-
         self.ip = ip
         self.selected = False
         self.icon_rel_path = icon_rel_path
-
+        self.status_color = None   # None | "green" | "red"
         self.setFixedSize(48, 56)
         self.setToolTip(f"{name}\n{ip}")
         self.setStyleSheet("background: transparent; border: none;")
-
         self._build_ui(name)
         self._load_icon()
-        
 
     def _build_ui(self, name: str):
         layout = QVBoxLayout(self)
@@ -55,35 +54,69 @@ class PcCard(QFrame):
             self.icon.setText("PC")
             self.icon.setStyleSheet(f"color:{self.NORMAL_COLOR}; font-weight:700;")
             return
-
         self._apply_icon_color(self.NORMAL_COLOR)
 
     def _apply_icon_color(self, color_hex: str):
+        """Tint the PC icon with the given hex color — same mechanism for
+        normal / selected / online / offline states."""
         tinted = QPixmap(self.base_pm.size())
         tinted.fill(Qt.transparent)
-
         painter = QPainter(tinted)
         painter.setCompositionMode(QPainter.CompositionMode_Source)
         painter.drawPixmap(0, 0, self.base_pm)
         painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
         painter.fillRect(tinted.rect(), QColor(color_hex))
         painter.end()
-
         self.icon.setPixmap(
             tinted.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
 
+    def _resolve_color(self) -> str:
+        """Return the correct icon color based on current state priority:
+        selected > online > offline > normal"""
+        if self.selected:
+            return self.SELECTED_COLOR
+        if self.status_color == "green":
+            return self.ONLINE_COLOR
+        if self.status_color == "red":
+            return self.OFFLINE_COLOR
+        return self.NORMAL_COLOR
+
+    def _refresh_icon(self):
+        """Re-tint icon and label to match current state."""
+        color = self._resolve_color()
+        if hasattr(self, "base_pm") and self.base_pm and not self.base_pm.isNull():
+            self._apply_icon_color(color)
+        self.name_lbl.setStyleSheet(
+            f"color:{color}; font-size:9px; font-weight:600;"
+        )
+
+    # ── Selection ────────────────────────────────────────────────────────
     def mousePressEvent(self, event):
         self.set_selected(not self.selected)
         super().mousePressEvent(event)
 
     def set_selected(self, value: bool):
         self.selected = value
-        color = self.SELECTED_COLOR if value else self.NORMAL_COLOR
-        if hasattr(self, "base_pm") and self.base_pm and not self.base_pm.isNull():
-            self._apply_icon_color(color)
+        self._refresh_icon()
         self.toggled.emit(self.ip, value)
 
-    # Optional helper if later you add a delete button / context menu
+    # ── Status (online / offline) ─────────────────────────────────────────
+    def set_status_online(self):
+        """Tint icon green — PC is reachable."""
+        self.status_color = "green"
+        self._refresh_icon()
+
+    def set_status_offline(self):
+        """Tint icon red — PC is unreachable."""
+        self.status_color = "red"
+        self._refresh_icon()
+
+    def clear_status(self):
+        """Remove status tint and return to normal / selected color."""
+        self.status_color = None
+        self._refresh_icon()
+
+    # ── No paintEvent dot needed anymore ─────────────────────────────────
     def request_delete(self):
         self.delete_requested.emit(self.ip)
