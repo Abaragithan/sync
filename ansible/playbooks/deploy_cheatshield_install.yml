@@ -1,14 +1,15 @@
 ---
 # deploy_cheatshield_install.yml
 #
-# Task: Copy both exe files to clients and register server URL
+# Task: Copy both exe files to clients and run with server URL
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml \
+#     -e "server_url=https://hdkkdld.com" \
+#     -e "main_exe=CheatShieldClient_0_1_5.exe" \
+#     -e "second_exe=nssm.exe"
 #
-# Place the following files in ansible/files/ on the controller:
-#   - Cheat_shield.exe
-#   - <second_exe>.exe   # replace with actual name
+# Place the exe files in ansible/files/ on the controller
 
 - name: Copy and Install Cheat Shield
   hosts: windows_clients
@@ -16,12 +17,17 @@
 
   vars:
     install_dir: 'C:\Downloads'
-    server_url: 'https://cheatshield-dcs.vercel.app'
-    exe_files:
-      - CheatShieldClient_0_1_5.exe
-      - nssm.exe       # TODO: replace with actual second exe name
 
   tasks:
+    - name: Fail if required arguments are not provided
+      fail:
+        msg: "Missing required argument: {{ item }} must be passed with -e '{{ item }}=value'"
+      when: vars[item] is not defined or vars[item] | length == 0
+      loop:
+        - server_url
+        - main_exe
+        - second_exe
+
     - name: Ensure install directory exists
       win_file:
         path: "{{ install_dir }}"
@@ -32,11 +38,13 @@
         src: "{{ playbook_dir }}/../files/{{ item }}"
         dest: "{{ install_dir }}\\{{ item }}"
         force: yes
-      loop: "{{ exe_files }}"
+      loop:
+        - "{{ main_exe }}"
+        - "{{ second_exe }}"
 
-    - name: Run CheatShieldClient_0_1_5.exe with server URL
+    - name: Run main exe with server URL
       win_shell: |
-        Start-Process -FilePath "{{ install_dir }}\CheatShieldClient_0_1_5.exe" `
+        Start-Process -FilePath "{{ install_dir }}\{{ main_exe }}" `
           -ArgumentList "--server-url {{ server_url }}" `
           -Verb RunAs `
           -Wait
@@ -44,4 +52,4 @@
 
     - name: Show execution result
       debug:
-        msg: "CheatShieldClient_0_1_5.exe exited with return code: {{ install_result.rc }}"
+        msg: "{{ main_exe }} exited with return code: {{ install_result.rc }}"

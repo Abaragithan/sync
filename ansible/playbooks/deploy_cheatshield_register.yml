@@ -11,7 +11,9 @@
 # IP mapping: PC-001 -> 10.20.9.1, PC-010 -> 10.20.9.10, etc.
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_register.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_register.yml \
+#     -e "main_exe=CheatShieldClient_0_1_5.exe" \
+#     -e "tokens_csv=tokens.csv"
 
 - name: Register Cheat Shield with Per-PC Token
   hosts: windows_clients
@@ -19,12 +21,19 @@
 
   vars:
     install_dir: 'C:\Downloads'
-    tokens_file: "{{ playbook_dir }}/../files/tokens.csv"
 
   pre_tasks:
+    - name: Fail if required arguments are not provided
+      fail:
+        msg: "Missing required argument: {{ item }} must be passed with -e '{{ item }}=value'"
+      when: vars[item] is not defined or vars[item] | length == 0
+      loop:
+        - main_exe
+        - tokens_csv
+
     - name: Parse all token rows from CSV (skip header)
       set_fact:
-        all_tokens: "{{ lookup('file', tokens_file) | split('\n') | select('match', '^PC-') | list }}"
+        all_tokens: "{{ lookup('file', playbook_dir + '/../files/' + tokens_csv) | split('\n') | select('match', '^PC-') | list }}"
 
     - name: Build PC label from this host's IP (e.g. 10.20.9.1 -> PC-001)
       set_fact:
@@ -36,7 +45,7 @@
 
     - name: Fail if no token found for this host
       fail:
-        msg: "No token found for {{ inventory_hostname }} ({{ pc_label }}) in tokens.csv"
+        msg: "No token found for {{ inventory_hostname }} ({{ pc_label }}) in {{ tokens_csv }}"
       when: token_row == ''
 
     - name: Extract regToken from row
@@ -48,9 +57,9 @@
         msg: "Using token {{ client_token }} for {{ inventory_hostname }} ({{ pc_label }})"
 
   tasks:
-    - name: Run CheatShieldClient_0_1_5.exe with registration token
+    - name: Run main exe with registration token
       win_shell: |
-        Start-Process -FilePath "{{ install_dir }}\CheatShieldClient_0_1_5.exe" `
+        Start-Process -FilePath "{{ install_dir }}\{{ main_exe }}" `
           -ArgumentList "--register-cli={{ client_token }}" `
           -Verb RunAs `
           -Wait
@@ -58,4 +67,4 @@
 
     - name: Show execution result
       debug:
-        msg: "CheatShieldClient_0_1_5.exe --register-cli exited with return code: {{ register_result.rc }}"
+        msg: "{{ main_exe }} --register-cli exited with return code: {{ register_result.rc }}"
