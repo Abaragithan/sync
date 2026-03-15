@@ -4,259 +4,17 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QStackedWidget, QSizePolicy, QScrollArea, QRadioButton, QButtonGroup,
-    QApplication, QFileDialog,
+    QFileDialog,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QColor, QPalette, QFont
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QPalette
 
 from views.action_forms import get_form
-from core.ansible_worker import AnsibleWorker
+from views.software_theme import _t, _STEPS, _ACTIONS
+from views.software_widgets import StepProgressBar, LogPanel
+from views.software_controller import SoftwareController
 
 import os
-import sys
-
-# ── progress step registry ──────────────────────────────────────────────────
-_STEPS = [
-    ("select_pcs", "Select PCs"),
-    ("configure",  "Configure"),
-    ("executing",  "Executing"),
-    ("done",       "Done"),
-]
-_STEP_INDEX = {key: i for i, (key, _) in enumerate(_STEPS)}
-
-_ACTIONS = [("install", "Install"), ("remove", "Remove"), ("update", "Update")]
-
-# ── LIGHT MODE ONLY colour tokens ───────────────────────────────────────────
-LIGHT = {
-    "chrome_bg": "#ffffff", "chrome_bdr": "#e2e8f0",
-    "pill_done": "#1d4ed8", "pill_active": "#2563eb",
-    "pill_fail": "#dc2626", "pill_idle": "#cbd5e1",
-    "pill_text": "#ffffff", "pill_muted": "#94a3b8",
-    "line_done": "#2563eb", "line_idle": "#e2e8f0",
-    "log_bg": "#f8fafc", "log_header": "#f1f5f9", "log_border": "#e2e8f0",
-    "log_text": "#1e293b", "log_error": "#b91c1c", "log_dim": "#94a3b8",
-    "scrollbar": "#e2e8f0", "scroll_hdl": "#94a3b8",
-    "btn_idle_bg": "#ffffff", "btn_idle_bdr": "#e2e8f0", "btn_idle_fg": "#64748b",
-    "radio_bg": "#ffffff", "radio_bdr": "#cbd5e1", "radio_fg": "#64748b",
-    "radio_chk_bg": "#2563eb", "radio_chk_fg": "#ffffff",
-    "radio_hov_bdr": "#2563eb", "radio_hov_fg": "#0f172a",
-    "act_idle_bg": "#ffffff", "act_idle_bdr": "#cbd5e1", "act_idle_fg": "#64748b",
-    "act_active_bg": "#2563eb", "act_active_bdr": "#1d4ed8", "act_active_fg": "#ffffff",
-    "div_color": "#e2e8f0",
-    "badge_ok_fg": "#14532d", "badge_ok_bg": "#dcfce7", "badge_ok_bdr": "#15803d",
-    "badge_fail_fg": "#991b1b", "badge_fail_bg": "#fee2e2", "badge_fail_bdr": "#dc2626",
-    "abar_bg": "#f1f5f9", "abar_bdr": "#e2e8f0",
-    "abar_btn_bg": "#ffffff", "abar_btn_bdr": "#e2e8f0", "abar_btn_fg": "#334155",
-    "back_bg": "#ffffff", "back_bdr": "#e2e8f0", "back_fg": "#64748b",
-    "lbl_muted": "#64748b", "lbl_title": "#0f172a", "lbl_sub": "#64748b",
-    "vline": "#e2e8f0",
-}
-
-def _t() -> dict:
-    return LIGHT
-
-
-def _get_project_root() -> str:
-    if getattr(sys, "frozen", False):
-        exe_dir = os.path.dirname(sys.executable)
-        project_root = os.path.abspath(os.path.join(exe_dir, ".."))
-    else:
-        here = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.abspath(os.path.join(here, "..", ".."))
-
-    ansible_dir = os.path.join(project_root, "ansible")
-    if not os.path.exists(ansible_dir):
-        print(f"[WARNING] ansible/ folder not found at: {project_root}")
-
-    return project_root
-
-
-# =============================================================================
-# StepProgressBar
-# =============================================================================
-class StepProgressBar(QWidget):
-    def __init__(self, steps: list[tuple[str, str]], parent=None):
-        super().__init__(parent)
-        self._steps = steps
-        self._active = 0
-        self._failed = False
-        self.setFixedHeight(64)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-    def set_step(self, key: str, failed: bool = False):
-        self._active = _STEP_INDEX.get(key, 0)
-        self._failed = failed
-        self.update()
-
-    def paintEvent(self, _event):
-        from PySide6.QtGui import QPainter, QBrush
-        from PySide6.QtCore import QRectF
-        t = _t()
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        W, H = self.width(), self.height()
-        n = len(self._steps)
-        pill_w, pill_h, line_h = 116, 30, 2
-        spacing = (W - n * pill_w) / (n + 1)
-        y_pill = (H - pill_h) / 2
-        y_line = H / 2
-
-        for i, (key, label) in enumerate(self._steps):
-            x = spacing + i * (pill_w + spacing)
-            if i > 0:
-                prev_x = spacing + (i - 1) * (pill_w + spacing) + pill_w
-                line_rect = QRectF(prev_x, y_line - line_h / 2, x - prev_x, line_h)
-                line_col = t["line_done"] if i <= self._active else t["line_idle"]
-                p.fillRect(line_rect, QColor(line_col))
-
-            if i < self._active:
-                col = t["pill_done"]
-            elif i == self._active:
-                col = t["pill_fail"] if self._failed else t["pill_active"]
-            else:
-                col = t["pill_idle"]
-
-            rect = QRectF(x, y_pill, pill_w, pill_h)
-            p.setBrush(QBrush(QColor(col)))
-            p.setPen(Qt.NoPen)
-            p.drawRoundedRect(rect, pill_h / 2, pill_h / 2)
-
-            fnt = p.font()
-            fnt.setPixelSize(12)
-            fnt.setBold(i == self._active)
-            p.setFont(fnt)
-            p.setPen(QColor(t["pill_text"] if i <= self._active else t["pill_muted"]))
-            p.drawText(rect, Qt.AlignCenter, label)
-        p.end()
-
-
-# =============================================================================
-# LogPanel
-# =============================================================================
-class LogPanel(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(0)
-        self._build()
-
-    def _build(self):
-        t = _t()
-        self.setStyleSheet(
-            f"background: {t['log_bg']}; border-radius: 8px;"
-            f" border: 1px solid {t['log_border']};"
-        )
-        self._header = QFrame()
-        self._header.setFixedHeight(36)
-        self._header.setStyleSheet(
-            f"background: {t['log_header']}; border-radius: 8px 8px 0 0;"
-            f" border-bottom: 1px solid {t['log_border']};"
-        )
-        hrow = QHBoxLayout(self._header)
-        hrow.setContentsMargins(14, 0, 14, 0)
-        self._title_lbl = QLabel("Execution Log")
-        self._title_lbl.setStyleSheet(
-            f"color: {t['lbl_muted']}; font-size: 12px; font-weight: 600;"
-            " letter-spacing: 0.5px; background: transparent; border: none;"
-        )
-        hrow.addWidget(self._title_lbl)
-        hrow.addStretch()
-        self.status_badge = QLabel("")
-        self.status_badge.setStyleSheet(
-            "font-size: 11px; font-weight: 700; padding: 3px 10px;"
-            " border-radius: 10px; background: transparent; border: none;"
-        )
-        self.status_badge.hide()
-        hrow.addWidget(self.status_badge)
-        self._layout.addWidget(self._header)
-
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: transparent; }}"
-            f"QScrollBar:vertical {{ background: {t['scrollbar']}; width: 5px; border-radius: 2px; }}"
-            f"QScrollBar::handle:vertical {{ background: {t['scroll_hdl']}; border-radius: 2px; }}"
-            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
-        )
-        self._inner = QWidget()
-        self._inner.setStyleSheet("background: transparent;")
-        self._inner_layout = QVBoxLayout(self._inner)
-        self._inner_layout.setContentsMargins(14, 10, 14, 10)
-        self._inner_layout.setSpacing(1)
-        self._inner_layout.addStretch()
-        self._scroll.setWidget(self._inner)
-        self._layout.addWidget(self._scroll)
-
-        self._action_bar = QFrame()
-        self._action_bar.setFixedHeight(50)
-        self._action_bar.setStyleSheet(
-            f"background: {t['abar_bg']}; border-radius: 0 0 8px 8px;"
-            f" border-top: 1px solid {t['abar_bdr']};"
-        )
-        arow = QHBoxLayout(self._action_bar)
-        arow.setContentsMargins(12, 0, 12, 0)
-        arow.setSpacing(8)
-        self.retry_btn = QPushButton("↺ Retry")
-        self.new_task_btn = QPushButton("+ New Task")
-        self.export_btn = QPushButton("↓ Export Log")
-        btn_style = (
-            f"background: {t['abar_btn_bg']}; border: 1px solid {t['abar_btn_bdr']};"
-            f" color: {t['abar_btn_fg']}; border-radius: 6px; padding: 5px 12px; font-size: 12px;"
-        )
-        for btn in (self.retry_btn, self.new_task_btn, self.export_btn):
-            btn.setStyleSheet(btn_style)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            arow.addWidget(btn)
-        self._action_bar.hide()
-        self._layout.addWidget(self._action_bar)
-
-    def clear(self):
-        while self._inner_layout.count() > 1:
-            item = self._inner_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self.status_badge.hide()
-        self._action_bar.hide()
-
-    def append_line(self, text: str, style: str = "normal"):
-        t = _t()
-        is_error = style == "error"
-        is_dim   = style == "dim"
-        colour   = t["log_error"] if is_error else (t["log_dim"] if is_dim else t["log_text"])
-        lbl = QLabel(text)
-        lbl.setWordWrap(True)
-        lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        lbl.setProperty("log_error", is_error)
-        lbl.setProperty("log_dim",   is_dim)
-        lbl.setStyleSheet(
-            f"color: {colour}; font-family: 'Consolas', 'Courier New', monospace;"
-            " font-size: 12px; background: transparent; border: none;"
-        )
-        self._inner_layout.insertWidget(self._inner_layout.count() - 1, lbl)
-        QTimer.singleShot(30, lambda: self._scroll.verticalScrollBar().setValue(
-            self._scroll.verticalScrollBar().maximum()
-        ))
-
-    def set_status(self, ok: bool):
-        t = _t()
-        if ok:
-            self.status_badge.setText("✓ SUCCESS")
-            self.status_badge.setStyleSheet(
-                f"color: {t['badge_ok_fg']}; background: {t['badge_ok_bg']};"
-                f" border: 1px solid {t['badge_ok_bdr']};"
-                " font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;"
-            )
-        else:
-            self.status_badge.setText("✗ FAILED")
-            self.status_badge.setStyleSheet(
-                f"color: {t['badge_fail_fg']}; background: {t['badge_fail_bg']};"
-                f" border: 1px solid {t['badge_fail_bdr']};"
-                " font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;"
-            )
-        self.status_badge.show()
-        self._action_bar.show()
 
 
 # =============================================================================
@@ -271,9 +29,13 @@ class SoftwarePage(QWidget):
         self.inventory_manager = inventory_manager
         self.state = state
         self._form_cache: dict[tuple[str, str], QWidget] = {}
-        self._worker: AnsibleWorker | None = None
-        self._last_payload: dict | None = None
         self._build_ui()
+        self._controller = SoftwareController(
+            log_panel=self.log_panel,
+            progress_bar=self.progress_bar,
+            execute_btn=self.execute_btn,
+            state=self.state,
+        )
 
     # =========================================================================
     # UI construction
@@ -384,24 +146,13 @@ class SoftwarePage(QWidget):
         self.execute_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.execute_btn.setStyleSheet(
             "QPushButton#PrimaryBtn {"
-            "   background: #2563eb;"
-            "   color: white;"
-            "   border: none;"
-            "   border-radius: 8px;"
-            "   padding: 12px 24px;"
-            "   font-size: 14px;"
-            "   font-weight: 700;"
+            "   background: #2563eb; color: white; border: none;"
+            "   border-radius: 8px; padding: 12px 24px;"
+            "   font-size: 14px; font-weight: 700;"
             "}"
-            "QPushButton#PrimaryBtn:hover {"
-            "   background: #1d4ed8;"
-            "}"
-            "QPushButton#PrimaryBtn:pressed {"
-            "   background: #1e40af;"
-            "}"
-            "QPushButton#PrimaryBtn:disabled {"
-            "   background: #cbd5e1;"
-            "   color: #64748b;"
-            "}"
+            "QPushButton#PrimaryBtn:hover { background: #1d4ed8; }"
+            "QPushButton#PrimaryBtn:pressed { background: #1e40af; }"
+            "QPushButton#PrimaryBtn:disabled { background: #cbd5e1; color: #64748b; }"
         )
         self.execute_btn.clicked.connect(self._on_execute_clicked)
         left_layout.addWidget(self.execute_btn)
@@ -432,7 +183,7 @@ class SoftwarePage(QWidget):
         self.apply_theme()
 
     # =========================================================================
-    # Theme - LIGHT MODE ONLY
+    # Theme
     # =========================================================================
     def apply_theme(self):
         t = _t()
@@ -546,9 +297,7 @@ class SoftwarePage(QWidget):
             "targets": self.state.selected_targets,
             **form_payload,
         }
-        self._last_payload = payload
-        self.log_panel.clear()
-        self._run_ansible(payload)
+        self._controller.run(payload)
 
     def _on_validation_error(self, msg: str):
         self.progress_bar.set_step("configure")
@@ -556,241 +305,14 @@ class SoftwarePage(QWidget):
         self.execute_btn.setText("Execute →")
         self.log_panel.append_line(f"✗ {msg}", "error")
 
-    # =========================================================================
-    # Real Ansible execution
-    # =========================================================================
-    def _run_ansible(self, payload: dict):
-        os_name = payload.get("os", self.state.target_os)
-        action  = payload.get("action", self.state.action)
-        targets = payload.get("targets", self.state.selected_targets)
-
-        project_root = _get_project_root()
-        ssh_dir      = os.path.expanduser("~/.ssh")
-        vault_pass   = os.path.expanduser("~/.ansible_vault_pass")
-        sw_repo      = os.path.join(project_root, "software_repo")
-
-        app_state_map = {"install": "present", "remove": "absent", "update": "latest"}
-        app_state = app_state_map.get(action, "present")
-
-        target_host = "windows_clients" if os_name == "windows" else "linux_clients"
-        extra: dict[str, str] = {
-            "app_state":   app_state,
-            "target_host": target_host,
-        }
-
-        # ── Windows Install ───────────────────────────────────────────────────
-        if action == "install" and os_name == "windows":
-            choco_pkg = payload.get("choco_package", "").strip()
-            file_path = payload.get("file", "").strip()
-
-            if not choco_pkg and not file_path:
-                self.log_panel.append_line(
-                    "✗ Enter a Chocolatey package name or select a local installer file.", "error"
-                )
-                self._on_execution_finished(ok=False)
-                return
-
-            if choco_pkg:
-                extra["choco_package"] = choco_pkg
-            else:
-                file_name = os.path.basename(file_path)
-                extra["file_name"] = file_name
-                self._ensure_in_repo(file_path, sw_repo)
-                if payload.get("args", "").strip():
-                    extra["custom_install_args"] = payload["args"].strip()
-
-        # ── Windows Remove ────────────────────────────────────────────────────
-        elif action == "remove" and os_name == "windows":
-            choco_pkg = payload.get("choco_package", "").strip()
-            app_name  = payload.get("app_name", "").strip()
-
-            if not choco_pkg and not app_name:
-                self.log_panel.append_line(
-                    "✗ Enter a Chocolatey package name or an application display name.", "error"
-                )
-                self._on_execution_finished(ok=False)
-                return
-
-            if choco_pkg:
-                extra["choco_package"] = choco_pkg
-            else:
-                extra["app_name"] = app_name
-
-        # ── Linux Install ─────────────────────────────────────────────────────
-        elif action == "install" and os_name == "linux":
-            pkgs = payload.get("packages", "").strip()
-            if not pkgs:
-                self.log_panel.append_line("✗ No packages specified.", "error")
-                self._on_execution_finished(ok=False)
-                return
-            extra["package_name"] = pkgs
-
-        # ── Linux Remove ──────────────────────────────────────────────────────
-        elif action == "remove" and os_name == "linux":
-            pkgs = payload.get("packages", "").strip()
-            if not pkgs:
-                self.log_panel.append_line("✗ No packages specified.", "error")
-                self._on_execution_finished(ok=False)
-                return
-            extra["package_name"] = pkgs
-
-        # ── Write temp inventory ──────────────────────────────────────────────
-        tmp_inv = self._write_temp_inventory(
-            project_root, targets, os_name, target_host
-        )
-        if tmp_inv is None:
-            self.log_panel.append_line("✗ Could not write temporary inventory.", "error")
-            self._on_execution_finished(ok=False)
-            return
-
-        self.log_panel.append_line(f"  DEBUG tmp_inv: {tmp_inv}", "dim")
-        self.log_panel.append_line(f"  DEBUG project_root: {project_root}", "dim")
-        self.log_panel.append_line(f"  DEBUG file exists: {os.path.exists(tmp_inv)}", "dim")
-
-        # Mount tmp inventory directly into container at fixed path
-        inv_container_path = "/tmp/_sync_tmp_inventory.ini"
-
-        ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
-
-        self.log_panel.append_line(
-            f"▶ ansible-playbook  [{action.upper()} / {os_name.upper()}]"
-            f"  →  {len(targets)} host(s)", "dim"
-        )
-        self.log_panel.append_line(f"  Hosts : {', '.join(targets)}", "dim")
-        self.log_panel.append_line(f"  Vars  : {ev_str}", "dim")
-        self.log_panel.append_line("", "dim")
-
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{project_root}:/app",
-            "-v", f"{ssh_dir}:/root/.ssh:ro",
-            "-v", f"{tmp_inv}:{inv_container_path}",
-        ]
-
-        if action == "install" and os_name == "windows" and extra.get("file_name"):
-            cmd += ["-v", f"{sw_repo}:/app/software_repo"]
-
-        if os_name == "linux" and os.path.exists(vault_pass):
-            cmd += ["-v", f"{vault_pass}:/vault_pass:ro"]
-
-        cmd += [
-            "-w", "/app/ansible",
-            "sync-ansible:latest",
-            "ansible-playbook",
-            "-i", inv_container_path,
-            "playbooks/master_deploy_v2.yml",
-            "-e", ev_str,
-        ]
-
-        if os_name == "linux" and os.path.exists(vault_pass):
-            cmd += ["--vault-password-file=/vault_pass"]
-
-        if self._worker and self._worker.isRunning():
-            self.log_panel.append_line(
-                "⚠ A task is already running. Wait for it to finish.", "error"
-            )
-            return
-
-        self._worker = AnsibleWorker(cmd)
-        self._worker.output_received.connect(self._on_ansible_line)
-        self._worker.finished.connect(
-            lambda ok: self._on_execution_finished(ok, tmp_inv)
-        )
-        self._worker.start()
-
-    @staticmethod
-    def _write_temp_inventory(
-        project_root: str,
-        targets: list[str],
-        os_name: str,
-        group: str,
-    ) -> str | None:
-        import tempfile
-
-        ansible_dir = os.path.join(project_root, "ansible")
-        real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
-
-        tmp_dir  = tempfile.gettempdir()
-        tmp_path = os.path.join(tmp_dir, "_sync_tmp_inventory.ini")
-
-        group_vars_lines: list[str] = []
-        if os.path.exists(real_inv):
-            with open(real_inv, "r") as f:
-                in_vars = False
-                for line in f:
-                    stripped = line.strip()
-                    if stripped == f"[{group}:vars]":
-                        in_vars = True
-                        group_vars_lines.append(line)
-                        continue
-                    if in_vars:
-                        if stripped.startswith("["):
-                            in_vars = False
-                        else:
-                            group_vars_lines.append(line)
-        else:
-            print(f"[SoftwarePage] WARNING: hosts.ini not found at {real_inv}")
-
-        try:
-            with open(tmp_path, "w") as f:
-                f.write(f"[{group}]\n")
-                for ip in targets:
-                    f.write(f"{ip}\n")
-                f.write("\n")
-                for line in group_vars_lines:
-                    f.write(line)
-            return tmp_path
-        except OSError as e:
-            print(f"[SoftwarePage] Failed to write temp inventory: {e}")
-            return None
-
-    @staticmethod
-    def _ensure_in_repo(src_path: str, repo_dir: str):
-        import shutil
-        os.makedirs(repo_dir, exist_ok=True)
-        dst = os.path.join(repo_dir, os.path.basename(src_path))
-        if not os.path.exists(dst):
-            try:
-                shutil.copy2(src_path, dst)
-            except OSError as e:
-                print(f"[SoftwarePage] Could not copy installer to repo: {e}")
-
-    def _on_ansible_line(self, line: str):
-        low = line.lower()
-        if any(kw in low for kw in ("fatal:", "error", "failed!", "unreachable")):
-            self.log_panel.append_line(line, "error")
-        elif line.strip() == "" or line.strip().startswith("*"):
-            self.log_panel.append_line(line, "dim")
-        else:
-            self.log_panel.append_line(line, "normal")
-
-    def _on_execution_finished(self, ok: bool, tmp_inv: str | None = None):
-        if tmp_inv and os.path.exists(tmp_inv):
-            try:
-                os.remove(tmp_inv)
-            except OSError:
-                pass
-        self.progress_bar.set_step("done", failed=not ok)
-        self.log_panel.set_status(ok)
-        self.execute_btn.setEnabled(True)
-        self.execute_btn.setText("Execute →")
-        self._worker = None
-
     def _on_retry(self):
-        if self._last_payload is None:
-            return
-        self.progress_bar.set_step("executing")
-        self.execute_btn.setEnabled(False)
-        self.execute_btn.setText("Executing...")
-        self.log_panel.clear()
-        self._run_ansible(self._last_payload)
+        self._controller.retry()
 
     def _on_new_task(self):
         key = self._current_key()
         if key in self._form_cache:
             self._form_cache[key].reset()
         self.log_panel.clear()
-        self._last_payload = None
         self.progress_bar.set_step("configure")
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("Execute →")
@@ -840,6 +362,7 @@ class SoftwarePage(QWidget):
 
 # ── fallback form ──────────────────────────────────────────────────────────
 class _NoForm(QWidget):
+    from PySide6.QtCore import Signal
     payload_ready    = Signal(dict)
     validation_error = Signal(str)
 
@@ -856,3 +379,5 @@ class _NoForm(QWidget):
 
     def reset(self):
         pass
+
+
