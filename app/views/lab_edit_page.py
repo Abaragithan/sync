@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Dict, List
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
     QFrame, QGridLayout, QScrollArea, QMessageBox, QDialog,
@@ -15,6 +17,9 @@ from .dialogs.edit_pc_ip_dialog import EditPcIpDialog
 from .dialogs.bulk_ip_dialog import BulkIpDialog
 from .dialogs.add_pc_dialog import AddPcDialog
 from .dialogs.glass_messagebox import show_glass_message
+from .dialogs.edit_lab_dialog import EditLabDialog
+
+import ipaddress
 
 
 class LabComboDelegate(QStyledItemDelegate):
@@ -236,6 +241,14 @@ class LabEditPage(QWidget):
         self.lab_name_lbl = QLabel("No lab loaded")
         self.lab_name_lbl.setObjectName("LabInfo")
         right_info.addWidget(self.lab_name_lbl)
+
+        # In the header section of _build_ui, after adding lab_combo, add:
+        self.edit_lab_btn = QPushButton("✎ Edit Lab Config")
+        self.edit_lab_btn.setObjectName("ActionButton")
+        self.edit_lab_btn.setCursor(Qt.PointingHandCursor)
+        self.edit_lab_btn.setFixedHeight(38)
+        self.edit_lab_btn.clicked.connect(self._edit_lab_configuration)
+        header.addWidget(self.edit_lab_btn)  # Add after lab_combo
 
         footer_layout.addLayout(right_info, 1)
 
@@ -767,3 +780,171 @@ class LabEditPage(QWidget):
             show_glass_message(self, "Success", f"IP updated to {new_ip}.", icon=QMessageBox.Information)
         else:
             show_glass_message(self, "IP Error", "Invalid or duplicate IP", icon=QMessageBox.Warning)
+
+    def _add_edit_lab_button(self):
+        """Add edit lab button to the header (call this in _build_ui)"""
+        # Find where the header is built and add this button after the lab combo
+        self.edit_lab_btn = QPushButton("✎ Edit Lab Config")
+        self.edit_lab_btn.setObjectName("ActionButton")
+        self.edit_lab_btn.setCursor(Qt.PointingHandCursor)
+        self.edit_lab_btn.setFixedHeight(38)
+        self.edit_lab_btn.clicked.connect(self._edit_lab_configuration)
+        # Add this to your header layout after the lab_combo
+        # header.addWidget(self.edit_lab_btn)
+
+    def _edit_lab_configuration(self):
+        """Open dialog to edit lab configuration"""
+        if not self.state.current_lab:
+            show_glass_message(self, "No Lab", "Load a lab first.", icon=QMessageBox.Warning)
+            return
+        
+        # Get current layout
+        current_layout = self.inventory_manager.get_lab_layout(self.state.current_lab)
+        if not current_layout:
+            # If no layout defined, use default
+            current_layout = {"sections": 1, "rows": 1, "cols": 1}
+        
+        # Open edit dialog
+        dlg = EditLabDialog(
+            self,
+            current_lab_name=self.state.current_lab,
+            current_layout=current_layout
+        )
+    
+        if dlg.exec() != QDialog.Accepted:
+            return
+        
+        result = dlg.get_result()
+        if not result:
+            return
+        
+        # Check if lab name changed
+        name_changed = result.lab_name != self.state.current_lab
+        
+        # Check if layout changed
+        layout_changed = (
+            result.layout["sections"] != current_layout.get("sections") or
+            result.layout["rows"] != current_layout.get("rows") or
+            result.layout["cols"] != current_layout.get("cols")
+        )
+        
+        # If nothing changed, return
+        if not name_changed and not layout_changed:
+            return
+        
+        # If name changed, we need to handle renaming
+        if name_changed:
+            # Check if new name already exists
+            all_labs = self.inventory_manager.get_all_labs()
+            if result.lab_name in all_labs and result.lab_name != self.state.current_lab:
+                show_glass_message(
+                    self,
+                    "Edit Failed",
+                    f"A lab with name '{result.lab_name}' already exists.",
+                    icon=QMessageBox.Warning
+                )
+                return
+        
+        # Get existing PCs
+        existing_pcs = self.inventory_manager.get_pcs_for_lab(self.state.current_lab)
+        
+        if layout_changed:
+            # Layout changed but we're preserving IPs where possible
+            # This is more complex - we need to map existing PCs to new positions
+            new_pcs = self._map_pcs_to_new_layout(existing_pcs, result.layout)
+        else:
+            # Only name changed, preserve all PCs
+            new_pcs = existing_pcs
+    
+        # Now update the inventory
+        try:
+            # If name changed, delete old lab and create new one
+            if name_changed:
+                # Create new lab with updated data
+                self.inventory_manager.add_lab_with_layout(
+                    result.lab_name,
+                    result.layout,
+                    new_pcs
+                )
+
+                # Delete old lab
+                self.inventory_manager.delete_lab(self.state.current_lab)
+                
+            else:
+                # Just update the lab configuration
+                # For now, we'll delete and recreate since the inventory manager doesn't have an update method
+                self.inventory_manager.delete_lab(self.state.current_lab)
+                self.inventory_manager.add_lab_with_layout(
+                    result.lab_name,
+                    result.layout,
+                    new_pcs
+                )
+            
+            # Refresh the view
+            self.state.selected_targets.clear()
+            self._refresh_lab_list()
+            self.load_lab(result.lab_name)
+            
+            show_glass_message(
+                self,
+                "Success",
+                f"Lab configuration updated successfully.",
+                icon=QMessageBox.Information
+            )
+            
+        except Exception as e:
+            show_glass_message(
+                self,
+                "Edit Failed",
+                f"Error updating lab: {str(e)}",
+                icon=QMessageBox.Warning
+            )
+
+    def _map_pcs_to_new_layout(self, existing_pcs: List[Dict], new_layout: Dict) -> List[Dict]:
+        """
+        Map existing PCs to new layout positions while preserving IPs.
+        PCs are assigned by increasing IP, section-by-section, top to bottom.
+        """
+        new_pcs = []
+        sections = new_layout["sections"]
+        rows = new_layout["rows"]
+        cols = new_layout["cols"]
+        
+        # Sort existing PCs by IP and place them into the new layout order.
+        sorted_pcs = sorted(
+            existing_pcs,
+            key=lambda x: ipaddress.ip_address(x.get("ip", "0.0.0.0"))
+        )
+        
+        # Create mapping for new positions
+        position_index = 0
+        for row in range(1, rows + 1):
+            for section in range(1, sections + 1):
+                for col in range(1, cols + 1):
+                    if position_index >= len(sorted_pcs):
+                        return new_pcs
+
+                    # Use existing PC with preserved IP
+                    pc = sorted_pcs[position_index].copy()
+                    pc["name"] = f"PC-{position_index + 1}"
+                    pc["section"] = section
+                    pc["row"] = row
+                    pc["col"] = col
+                    new_pcs.append(pc)
+                    position_index += 1
+        
+        return new_pcs
+
+    def _add_edit_button_to_header(self):
+        """Helper method to add edit button to header - call this in _build_ui"""
+        # Find the header layout (you'll need to store a reference to it)
+        # For example, if you have a header_layout variable in _build_ui, add:
+        # self.header_layout = header
+        # Then here you can do:
+        if hasattr(self, 'header_layout'):
+            self.edit_lab_btn = QPushButton("✎ Edit Lab Config")
+            self.edit_lab_btn.setObjectName("ActionButton")
+            self.edit_lab_btn.setCursor(Qt.PointingHandCursor)
+            self.edit_lab_btn.setFixedHeight(38)
+            self.edit_lab_btn.clicked.connect(self._edit_lab_configuration)
+            self.header_layout.addWidget(self.edit_lab_btn)

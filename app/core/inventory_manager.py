@@ -1,5 +1,6 @@
 import json
 import os
+import ipaddress
 from typing import Dict, List, Optional, Any
 
 from .config import INVENTORY_FILE, LABS
@@ -161,10 +162,13 @@ class InventoryManager:
         print(f"[INVENTORY] {len(pcs)} PCs for {lab} (filter: {os_filter})")
         return pcs
 
-    def add_lab_with_layout(self, lab_name: str, layout: dict, ips) -> None:
+    def add_lab_with_layout(self, lab_name: str, layout: dict, pcs_or_ips) -> None:
         """
-        Create/overwrite a lab. Accepts a flat list of IP strings (NOT dicts).
-        Assigns section/row/col using ROW-FIRST ordering across sections.
+        Create/overwrite a lab.
+
+        Accepts either:
+        - a flat list of IP strings, which will be assigned using row-first ordering across sections
+        - a full list of PC dicts, which will be preserved as provided
 
         Called from controller as:
             inventory_manager.add_lab_with_layout(
@@ -173,14 +177,17 @@ class InventoryManager:
         """
         self._migrate_old_to_new_if_needed()
 
-        pcs = self.build_pcs_from_ips(ips, layout)
+        if pcs_or_ips and isinstance(pcs_or_ips[0], dict):
+            pcs = [pc.copy() for pc in pcs_or_ips]
+        else:
+            pcs = self.build_pcs_from_ips(pcs_or_ips, layout)
 
         self.data["labs"][lab_name] = {
             "layout": layout,
             "pcs":    pcs,
         }
         self._save(self.data)
-        print(f"[INVENTORY] Created lab '{lab_name}' with {len(pcs)} PCs (row-first ordering)")
+        print(f"[INVENTORY] Created lab '{lab_name}' with {len(pcs)} PCs")
 
     def delete_lab(self, lab_name: str) -> bool:
         deleted = False
