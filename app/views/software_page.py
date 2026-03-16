@@ -323,15 +323,9 @@ class SoftwarePage(QWidget):
         )
         if not path:
             return
-        lines = []
-        layout = self.log_panel._inner_layout
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item and item.widget():
-                lines.append(item.widget().text())
         try:
             with open(path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
+                f.write(self.log_panel.get_plain_text())
         except OSError as e:
             self.log_panel.append_line(f"Export failed: {e}", "error")
 

@@ -263,7 +263,13 @@ class SoftwareController:
 
     def _on_ansible_line(self, line: str):
         low = line.lower()
-        if any(kw in low for kw in ("fatal:", "error", "failed!", "unreachable")):
+        if "play recap" in low:
+            self.log_panel.append_line(line, "dim")
+        elif (
+            "failed=0" in low and "unreachable=0" in low
+        ) or low.startswith("ok:") or low.startswith("changed:"):
+            self.log_panel.append_line(line, "success")
+        elif any(kw in low for kw in ("fatal:", "error", "failed!", "unreachable")):
             self.log_panel.append_line(line, "error")
         elif line.strip() == "" or line.strip().startswith("*"):
             self.log_panel.append_line(line, "dim")
@@ -278,6 +284,10 @@ class SoftwareController:
                 pass
         self.progress_bar.set_step("done", failed=not ok)
         self.log_panel.set_status(ok)
+        self.log_panel.append_line(
+            "Execution completed successfully." if ok else "Execution failed.",
+            "success" if ok else "error",
+        )
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("Execute →")
         self._worker = None

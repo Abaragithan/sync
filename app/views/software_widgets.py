@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QSizePolicy, QScrollArea, QFileDialog,
+    QSizePolicy, QTextEdit,
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QTextCursor
 
 from views.software_theme import _t, _STEPS, _STEP_INDEX
 
@@ -111,23 +111,26 @@ class LogPanel(QWidget):
         hrow.addWidget(self.status_badge)
         self._layout.addWidget(self._header)
 
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: transparent; }}"
+        self._log_view = QTextEdit()
+        self._log_view.setReadOnly(True)
+        self._log_view.setLineWrapMode(QTextEdit.WidgetWidth)
+        self._log_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._log_view.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+        )
+        self._log_view.setStyleSheet(
+            f"QTextEdit {{"
+            f" background: transparent;"
+            f" color: {t['log_text']};"
+            f" border: none;"
+            f" padding: 10px 14px;"
+            f" selection-background-color: #bfdbfe;"
+            f"}}"
             f"QScrollBar:vertical {{ background: {t['scrollbar']}; width: 5px; border-radius: 2px; }}"
             f"QScrollBar::handle:vertical {{ background: {t['scroll_hdl']}; border-radius: 2px; }}"
             f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
         )
-        self._inner = QWidget()
-        self._inner.setStyleSheet("background: transparent;")
-        self._inner_layout = QVBoxLayout(self._inner)
-        self._inner_layout.setContentsMargins(14, 10, 14, 10)
-        self._inner_layout.setSpacing(1)
-        self._inner_layout.addStretch()
-        self._scroll.setWidget(self._inner)
-        self._layout.addWidget(self._scroll)
+        self._layout.addWidget(self._log_view)
 
         self._action_bar = QFrame()
         self._action_bar.setFixedHeight(50)
@@ -153,10 +156,7 @@ class LogPanel(QWidget):
         self._layout.addWidget(self._action_bar)
 
     def clear(self):
-        while self._inner_layout.count() > 1:
-            item = self._inner_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self._log_view.clear()
         self.status_badge.hide()
         self._action_bar.hide()
 
@@ -164,20 +164,22 @@ class LogPanel(QWidget):
         t = _t()
         is_error = style == "error"
         is_dim   = style == "dim"
-        colour   = t["log_error"] if is_error else (t["log_dim"] if is_dim else t["log_text"])
-        lbl = QLabel(text)
-        lbl.setWordWrap(True)
-        lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        lbl.setProperty("log_error", is_error)
-        lbl.setProperty("log_dim",   is_dim)
-        lbl.setStyleSheet(
-            f"color: {colour}; font-family: 'Consolas', 'Courier New', monospace;"
-            " font-size: 12px; background: transparent; border: none;"
+        is_success = style == "success"
+        colour = (
+            t["log_error"] if is_error else
+            t["log_dim"] if is_dim else
+            t["log_success"] if is_success else
+            t["log_text"]
         )
-        self._inner_layout.insertWidget(self._inner_layout.count() - 1, lbl)
-        QTimer.singleShot(30, lambda: self._scroll.verticalScrollBar().setValue(
-            self._scroll.verticalScrollBar().maximum()
-        ))
+        cursor = self._log_view.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self._log_view.setTextCursor(cursor)
+        self._log_view.setTextColor(QColor(colour))
+        self._log_view.insertPlainText(text + "\n")
+        self._log_view.moveCursor(QTextCursor.End)
+
+    def get_plain_text(self) -> str:
+        return self._log_view.toPlainText()
 
     def set_status(self, ok: bool):
         t = _t()

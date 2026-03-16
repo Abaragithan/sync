@@ -16,7 +16,7 @@ LIGHT = {
     "pill_text": "#ffffff", "pill_muted": "#94a3b8",
     "line_done": "#2563eb", "line_idle": "#e2e8f0",
     "log_bg": "#f8fafc", "log_header": "#f1f5f9", "log_border": "#e2e8f0",
-    "log_text": "#1e293b", "log_error": "#b91c1c", "log_dim": "#94a3b8",
+    "log_text": "#1e293b", "log_error": "#b91c1c", "log_dim": "#94a3b8", "log_success": "#15803d",
     "scrollbar": "#e2e8f0", "scroll_hdl": "#94a3b8",
     "btn_idle_bg": "#ffffff", "btn_idle_bdr": "#e2e8f0", "btn_idle_fg": "#64748b",
     "radio_bg": "#ffffff", "radio_bdr": "#cbd5e1", "radio_fg": "#64748b",
