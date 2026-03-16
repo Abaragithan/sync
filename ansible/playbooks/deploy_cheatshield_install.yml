@@ -1,0 +1,55 @@
+---
+# deploy_cheatshield_install.yml
+#
+# Task: Copy both exe files to clients and run with server URL
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml \
+#     -e "server_url=https://hdkkdld.com" \
+#     -e "main_exe=CheatShieldClient_0_1_5.exe" \
+#     -e "second_exe=nssm.exe"
+#
+# Place the exe files in ansible/files/ on the controller
+
+- name: Copy and Install Cheat Shield
+  hosts: windows_clients
+  gather_facts: false
+
+  vars:
+    install_dir: 'C:\Downloads'
+
+  tasks:
+    - name: Fail if required arguments are not provided
+      fail:
+        msg: "Missing required argument: {{ item }} must be passed with -e '{{ item }}=value'"
+      when: vars[item] is not defined or vars[item] | length == 0
+      loop:
+        - server_url
+        - main_exe
+        - second_exe
+
+    - name: Ensure install directory exists
+      win_file:
+        path: "{{ install_dir }}"
+        state: directory
+
+    - name: Copy exe files to client
+      win_copy:
+        src: "{{ playbook_dir }}/../files/{{ item }}"
+        dest: "{{ install_dir }}\\{{ item }}"
+        force: yes
+      loop:
+        - "{{ main_exe }}"
+        - "{{ second_exe }}"
+
+    - name: Run main exe with server URL
+      win_shell: |
+        Start-Process -FilePath "{{ install_dir }}\{{ main_exe }}" `
+          -ArgumentList "--server-url {{ server_url }}" `
+          -Verb RunAs `
+          -Wait
+      register: install_result
+
+    - name: Show execution result
+      debug:
+        msg: "{{ main_exe }} exited with return code: {{ install_result.rc }}"

@@ -22,9 +22,9 @@ import os as _os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QCheckBox, QComboBox,
-    QFileDialog, QSizePolicy,
+    QFileDialog, QSizePolicy, QListWidget, QListWidgetItem,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QTimer
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -44,7 +44,6 @@ def _field(placeholder: str = "", read_only: bool = False) -> QLineEdit:
     w = QLineEdit()
     w.setPlaceholderText(placeholder)
     w.setReadOnly(read_only)
-    # only structural styling – colours come from global QSS QLineEdit rule
     w.setStyleSheet("border-radius: 6px; padding: 8px 10px; font-size: 13px;")
     return w
 
@@ -62,6 +61,311 @@ class ValidationError(Exception):
     pass
 
 
+# ── Local Chocolatey package list ─────────────────────────────────────────────
+
+CHOCO_PACKAGES = [
+    # Browsers
+    ("googlechrome",            "Google Chrome",                "Browser"),
+    ("firefox",                 "Mozilla Firefox",              "Browser"),
+    ("microsoft-edge",          "Microsoft Edge",               "Browser"),
+    ("opera",                   "Opera Browser",                "Browser"),
+    ("brave",                   "Brave Browser",                "Browser"),
+    ("tor-browser",             "Tor Browser",                  "Browser"),
+    # Media
+    ("vlc",                     "VLC Media Player",             "Media"),
+    ("spotify",                 "Spotify",                      "Media"),
+    ("itunes",                  "iTunes",                       "Media"),
+    ("k-litecodecpackfull",     "K-Lite Codec Pack Full",       "Media"),
+    ("audacity",                "Audacity",                     "Media"),
+    ("handbrake",               "HandBrake",                    "Media"),
+    ("obs-studio",              "OBS Studio",                   "Media"),
+    ("foobar2000",              "foobar2000",                   "Media"),
+    ("mpv",                     "MPV Player",                   "Media"),
+    ("mpc-hc",                  "MPC-HC",                       "Media"),
+    # Developer Tools
+    ("vscode",                  "Visual Studio Code",           "Dev"),
+    ("git",                     "Git",                          "Dev"),
+    ("nodejs",                  "Node.js",                      "Dev"),
+    ("python",                  "Python",                       "Dev"),
+    ("python3",                 "Python 3",                     "Dev"),
+    ("jdk8",                    "Java JDK 8",                   "Dev"),
+    ("jdk11",                   "Java JDK 11",                  "Dev"),
+    ("jdk17",                   "Java JDK 17",                  "Dev"),
+    ("notepadplusplus",         "Notepad++",                    "Dev"),
+    ("sublimetext4",            "Sublime Text 4",               "Dev"),
+    ("intellijidea-community",  "IntelliJ IDEA Community",      "Dev"),
+    ("pycharm-community",       "PyCharm Community",            "Dev"),
+    ("eclipse",                 "Eclipse IDE",                  "Dev"),
+    ("netbeans",                "NetBeans IDE",                 "Dev"),
+    ("androidstudio",           "Android Studio",               "Dev"),
+    ("postman",                 "Postman",                      "Dev"),
+    ("insomnia-rest-api-client","Insomnia",                     "Dev"),
+    ("docker-desktop",          "Docker Desktop",               "Dev"),
+    ("vagrant",                 "Vagrant",                      "Dev"),
+    ("virtualbox",              "VirtualBox",                   "Dev"),
+    ("vmwareworkstation",       "VMware Workstation",           "Dev"),
+    ("putty",                   "PuTTY",                        "Dev"),
+    ("winscp",                  "WinSCP",                       "Dev"),
+    ("filezilla",               "FileZilla",                    "Dev"),
+    ("curl",                    "cURL",                         "Dev"),
+    ("wget",                    "Wget",                         "Dev"),
+    ("wireshark",               "Wireshark",                    "Dev"),
+    ("nmap",                    "Nmap",                         "Dev"),
+    ("powershell-core",         "PowerShell Core",              "Dev"),
+    ("cmder",                   "Cmder",                        "Dev"),
+    ("hyper",                   "Hyper Terminal",               "Dev"),
+    ("windirstat",              "WinDirStat",                   "Dev"),
+    ("sysinternals",            "Sysinternals Suite",           "Dev"),
+    ("mysql",                   "MySQL",                        "Dev"),
+    ("mysql.workbench",         "MySQL Workbench",              "Dev"),
+    ("postgresql",              "PostgreSQL",                   "Dev"),
+    ("mongodb",                 "MongoDB",                      "Dev"),
+    ("robo3t",                  "Robo 3T",                      "Dev"),
+    ("redis",                   "Redis",                        "Dev"),
+    ("dbeaver",                 "DBeaver",                      "Dev"),
+    ("heidisql",                "HeidiSQL",                     "Dev"),
+    # Communication
+    ("zoom",                    "Zoom",                         "Communication"),
+    ("slack",                   "Slack",                        "Communication"),
+    ("microsoft-teams",         "Microsoft Teams",              "Communication"),
+    ("discord",                 "Discord",                      "Communication"),
+    ("skype",                   "Skype",                        "Communication"),
+    ("telegram",                "Telegram",                     "Communication"),
+    ("signal",                  "Signal",                       "Communication"),
+    ("whatsapp",                "WhatsApp",                     "Communication"),
+    # Office & Productivity
+    ("libreoffice-fresh",       "LibreOffice",                  "Office"),
+    ("openoffice",              "Apache OpenOffice",            "Office"),
+    ("onlyoffice",              "ONLYOFFICE",                   "Office"),
+    ("foxitreader",             "Foxit Reader",                 "Office"),
+    ("adobereader",             "Adobe Acrobat Reader",         "Office"),
+    ("sumatrapdf",              "Sumatra PDF",                  "Office"),
+    ("calibre",                 "Calibre",                      "Office"),
+    ("obsidian",                "Obsidian",                     "Office"),
+    ("notion",                  "Notion",                       "Office"),
+    ("evernote",                "Evernote",                     "Office"),
+    ("todoist",                 "Todoist",                      "Office"),
+    # Utilities
+    ("7zip",                    "7-Zip",                        "Utility"),
+    ("winrar",                  "WinRAR",                       "Utility"),
+    ("peazip",                  "PeaZip",                       "Utility"),
+    ("ccleaner",                "CCleaner",                     "Utility"),
+    ("bleachbit",               "BleachBit",                    "Utility"),
+    ("revo-uninstaller",        "Revo Uninstaller",             "Utility"),
+    ("geek-uninstaller",        "Geek Uninstaller",             "Utility"),
+    ("crystaldiskinfo",         "CrystalDiskInfo",              "Utility"),
+    ("hwinfo",                  "HWiNFO",                       "Utility"),
+    ("cpu-z",                   "CPU-Z",                        "Utility"),
+    ("gpu-z",                   "GPU-Z",                        "Utility"),
+    ("speccy",                  "Speccy",                       "Utility"),
+    ("autoruns",                "Autoruns",                     "Utility"),
+    ("procexp",                 "Process Explorer",             "Utility"),
+    ("everything",              "Everything Search",            "Utility"),
+    ("powertoys",               "Microsoft PowerToys",          "Utility"),
+    ("greenshot",               "Greenshot",                    "Utility"),
+    ("lightshot",               "Lightshot",                    "Utility"),
+    ("sharex",                  "ShareX",                       "Utility"),
+    ("teamviewer",              "TeamViewer",                   "Utility"),
+    ("anydesk",                 "AnyDesk",                      "Utility"),
+    ("parsec",                  "Parsec",                       "Utility"),
+    ("veracrypt",               "VeraCrypt",                    "Utility"),
+    ("keepass",                 "KeePass",                      "Utility"),
+    ("bitwarden",               "Bitwarden",                    "Utility"),
+    ("malwarebytes",            "Malwarebytes",                 "Utility"),
+    ("avastfreeantivirus",      "Avast Free Antivirus",         "Utility"),
+    ("glasswire",               "GlassWire",                    "Utility"),
+    ("windscribe",              "Windscribe VPN",               "Utility"),
+    ("protonvpn",               "ProtonVPN",                    "Utility"),
+    ("openvpn",                 "OpenVPN",                      "Utility"),
+    # Design & Creative
+    ("gimp",                    "GIMP",                         "Design"),
+    ("inkscape",                "Inkscape",                     "Design"),
+    ("krita",                   "Krita",                        "Design"),
+    ("blender",                 "Blender",                      "Design"),
+    ("figma",                   "Figma",                        "Design"),
+    ("darktable",               "Darktable",                    "Design"),
+    ("rawtherapee",             "RawTherapee",                  "Design"),
+    # Gaming
+    ("steam",                   "Steam",                        "Gaming"),
+    ("epicgameslauncher",       "Epic Games Launcher",          "Gaming"),
+    ("goggalaxy",               "GOG Galaxy",                   "Gaming"),
+    ("origin",                  "EA Origin",                    "Gaming"),
+    # Science & Education
+    ("r.project",               "R Project",                    "Science"),
+    ("rstudio",                 "RStudio",                      "Science"),
+    ("anaconda3",               "Anaconda",                     "Science"),
+    ("miniconda3",              "Miniconda",                    "Science"),
+    ("julia",                   "Julia",                        "Science"),
+    ("octave",                  "GNU Octave",                   "Science"),
+    ("scilab",                  "Scilab",                       "Science"),
+    # Runtime
+    ("dotnet",                  ".NET SDK",                     "Runtime"),
+    ("dotnet-runtime",          ".NET Runtime",                 "Runtime"),
+    ("dotnetfx",                ".NET Framework",               "Runtime"),
+    ("vcredist140",             "Visual C++ Redistributable",   "Runtime"),
+    ("directx",                 "DirectX",                      "Runtime"),
+    # Version Control
+    ("github-desktop",          "GitHub Desktop",               "VCS"),
+    ("gitkraken",               "GitKraken",                    "VCS"),
+    ("sourcetree",              "Sourcetree",                   "VCS"),
+    ("tortoisegit",             "TortoiseGit",                  "VCS"),
+    ("tortoisesvn",             "TortoiseSVN",                  "VCS"),
+    # Network
+    ("advanced-ip-scanner",     "Advanced IP Scanner",          "Network"),
+    ("angry-ip-scanner",        "Angry IP Scanner",             "Network"),
+    ("mremoteng",               "mRemoteNG",                    "Network"),
+    ("mobaxterm",               "MobaXterm",                    "Network"),
+]
+
+
+# ── Chocolatey autocomplete field (local list) ────────────────────────────────
+
+class ChocoSearchField(QWidget):
+    """
+    A QLineEdit with instant local search dropdown for Chocolatey packages.
+    Supports multiple packages separated by spaces — searches the last word typed.
+    """
+
+    def __init__(self, placeholder: str = "e.g.  vlc  notepadplusplus  7zip"):
+        super().__init__()
+        self._debounce = QTimer()
+        self._debounce.setSingleShot(True)
+        self._debounce.timeout.connect(self._do_search)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Input field
+        self.input = QLineEdit()
+        self.input.setPlaceholderText(placeholder)
+        self.input.setStyleSheet("border-radius: 6px; padding: 8px 10px; font-size: 13px;")
+        self.input.textChanged.connect(self._on_text_changed)
+        layout.addWidget(self.input)
+
+        # Dropdown list
+        self._dropdown = QListWidget()
+        self._dropdown.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: #ffffff;
+                font-size: 13px;
+                padding: 2px;
+            }
+            QListWidget::item {
+                padding: 6px 10px;
+                border-radius: 4px;
+                color: #0f172a;
+            }
+            QListWidget::item:hover {
+                background: #eff6ff;
+                color: #2563eb;
+            }
+            QListWidget::item:selected {
+                background: #2563eb;
+                color: #ffffff;
+            }
+        """)
+        self._dropdown.setFixedHeight(0)
+        self._dropdown.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self._dropdown)
+
+        # Install event filter AFTER all attributes are initialized
+        self.input.installEventFilter(self)
+        self._dropdown.installEventFilter(self)
+
+    def text(self) -> str:
+        return self.input.text()
+
+    def setText(self, text: str):
+        self.input.setText(text)
+
+    def clear(self):
+        self.input.clear()
+        self._hide_dropdown()
+
+    def _on_text_changed(self, text: str):
+        last_word = text.split()[-1] if text.strip() else ""
+        if len(last_word) >= 1:
+            self._debounce.start(150)
+        else:
+            self._hide_dropdown()
+
+    def _do_search(self):
+        text = self.input.text().strip()
+        last_word = text.split()[-1] if text else ""
+        if not last_word:
+            self._hide_dropdown()
+            return
+
+        query = last_word.lower()
+        typed_words = set(text.lower().split())
+        matches = []
+
+        for pkg_id, pkg_title, pkg_cat in CHOCO_PACKAGES:
+            if pkg_id.lower() in typed_words and pkg_id.lower() != query:
+                continue
+            if query in pkg_id.lower() or query in pkg_title.lower():
+                matches.append((pkg_id, pkg_title, pkg_cat))
+            if len(matches) >= 8:
+                break
+
+        self._dropdown.clear()
+        if not matches:
+            self._hide_dropdown()
+            return
+
+        for pkg_id, pkg_title, pkg_cat in matches:
+            item = QListWidgetItem(f"{pkg_id}  —  {pkg_title}  [{pkg_cat}]")
+            item.setData(Qt.UserRole, pkg_id)
+            self._dropdown.addItem(item)
+
+        row_h = 34
+        self._dropdown.setFixedHeight(min(len(matches), 6) * row_h + 8)
+
+    def _on_item_clicked(self, item: QListWidgetItem):
+        pkg_id = item.data(Qt.UserRole)
+        current = self.input.text()
+        words = current.split()
+        if words:
+            words[-1] = pkg_id
+        else:
+            words = [pkg_id]
+        self.input.setText(" ".join(words) + " ")
+        self.input.setFocus()
+        self._hide_dropdown()
+
+    def _hide_dropdown(self):
+        self._dropdown.clear()
+        self._dropdown.setFixedHeight(0)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is self.input and event.type() == QEvent.KeyPress:
+            key = event.key()
+            if key == Qt.Key_Down:
+                if self._dropdown.count() > 0:
+                    self._dropdown.setFocus()
+                    self._dropdown.setCurrentRow(0)
+                return True
+            elif key == Qt.Key_Escape:
+                self._hide_dropdown()
+                return True
+        if obj is self._dropdown and event.type() == QEvent.KeyPress:
+            key = event.key()
+            if key in (Qt.Key_Return, Qt.Key_Enter):
+                item = self._dropdown.currentItem()
+                if item:
+                    self._on_item_clicked(item)
+                return True
+            elif key == Qt.Key_Escape:
+                self._hide_dropdown()
+                self.input.setFocus()
+                return True
+        return super().eventFilter(obj, event)
+
+
 # ── base form ─────────────────────────────────────────────────────────────────
 
 class _BaseForm(QWidget):
@@ -73,7 +377,6 @@ class _BaseForm(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setSpacing(12)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        # transparent so parent panel background shows through
         self.setAttribute(Qt.WA_TranslucentBackground, False)
 
     def _add(self, label: str, widget: QWidget) -> QWidget:
@@ -97,14 +400,12 @@ class _BaseForm(QWidget):
 
     def _add_check(self, label: str) -> QCheckBox:
         cb = QCheckBox(label)
-        # no inline colour – inherits from global QSS QCheckBox
         self._layout.addWidget(cb)
         return cb
 
     def _add_combo(self, label: str, items: list) -> QComboBox:
         cb = QComboBox()
         cb.addItems(items)
-        # structural only
         cb.setStyleSheet("border-radius: 6px; padding: 5px 8px; font-size: 13px;")
         self._add(label, cb)
         return cb
@@ -128,8 +429,8 @@ class WinInstallForm(_BaseForm):
     def __init__(self):
         super().__init__()
 
-        # ── Chocolatey install (primary) ──
-        self.choco_input = _field("e.g.  vlc  notepadplusplus  7zip  git")
+        # ── Chocolatey install with autocomplete ──
+        self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  7zip  git")
         self._add_with_hint(
             "Chocolatey Package Name(s)  (recommended)",
             self.choco_input,
@@ -189,8 +490,8 @@ class WinRemoveForm(_BaseForm):
     def __init__(self):
         super().__init__()
 
-        # ── Chocolatey uninstall (primary) ──
-        self.choco_input = _field("e.g.  vlc  notepadplusplus  7zip  git")
+        # ── Chocolatey uninstall with autocomplete ──
+        self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  7zip  git")
         self._add_with_hint(
             "Chocolatey Package Name(s)  (recommended)",
             self.choco_input,
@@ -369,6 +670,4 @@ _REGISTRY = {
 
 def get_form(os_name: str, action: str):
     cls = _REGISTRY.get((os_name.lower(), action.lower()))
-    return cls() if cls else None
-    
-  
+    return cls() if cls else None# views/action_forms.py

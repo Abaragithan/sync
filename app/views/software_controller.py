@@ -135,12 +135,10 @@ class SoftwareController:
             self._on_execution_finished(ok=False)
             return
 
-        # DEBUG - remove after confirming fix
-        self.log_panel.append_line(f"  DEBUG tmp_inv: {tmp_inv}", "dim")
-        self.log_panel.append_line(f"  DEBUG project_root: {project_root}", "dim")
-        self.log_panel.append_line(f"  DEBUG file exists: {os.path.exists(tmp_inv)}", "dim")
+        # inventory is inside project_root/ansible/inventory/ which is
+        # already mounted as /app inside Docker — no separate mount needed
+        inv_container_path = "/app/ansible/inventory/_sync_tmp_inventory.ini"
 
-        inv_container_path = "/tmp/_sync_tmp_inventory.ini"
         ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
 
         self.log_panel.append_line(
@@ -155,7 +153,6 @@ class SoftwareController:
             "docker", "run", "--rm",
             "-v", f"{project_root}:/app",
             "-v", f"{ssh_dir}:/root/.ssh:ro",
-            "-v", f"{tmp_inv}:{inv_container_path}",
         ]
 
         if action == "install" and os_name == "windows" and extra.get("file_name"):
@@ -196,12 +193,14 @@ class SoftwareController:
         os_name: str,
         group: str,
     ) -> str | None:
-        import tempfile
 
         ansible_dir = os.path.join(project_root, "ansible")
         real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
-        tmp_dir     = tempfile.gettempdir()
-        tmp_path    = os.path.join(tmp_dir, "_sync_tmp_inventory.ini")
+
+        # Write inside project ansible/inventory/ — Docker mounts this as /app
+        inv_dir  = os.path.join(ansible_dir, "inventory")
+        os.makedirs(inv_dir, exist_ok=True)
+        tmp_path = os.path.join(inv_dir, "_sync_tmp_inventory.ini")
 
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
