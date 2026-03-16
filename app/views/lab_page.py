@@ -12,6 +12,7 @@ from .dialogs.edit_pc_ip_dialog import EditPcIpDialog
 from .dialogs.glass_messagebox import show_glass_message
 from .dialogs.confirm_delete_dialog import ConfirmDeleteDialog
 from .widgets.pc_card import PcCard
+from core.ping_service import check_many
 
 
 class LabPage(QWidget):
@@ -129,6 +130,15 @@ class LabPage(QWidget):
         self.select_btn.setFixedHeight(38)
         self.select_btn.clicked.connect(self._open_select_menu)
         actions.addWidget(self.select_btn)
+
+        # ── NEW: Check Status button ──────────────────────────────────────
+        self.check_status_btn = QPushButton("🔍 Check Status")
+        self.check_status_btn.setObjectName("ActionButton")
+        self.check_status_btn.setCursor(Qt.PointingHandCursor)
+        self.check_status_btn.setFixedHeight(38)
+        self.check_status_btn.clicked.connect(self.check_all_pc_status)
+        actions.addWidget(self.check_status_btn)
+        # ─────────────────────────────────────────────────────────────────
 
         self.edit_lab_btn = QPushButton("✏️ Edit Lab")
         self.edit_lab_btn.setObjectName("ActionButton")
@@ -510,7 +520,6 @@ class LabPage(QWidget):
             self.state.selected_targets = list(self.selected_pcs)
             self.state.current_lab = self.current_lab
 
-   
     def _on_lab_changed(self, lab_name: str):
         """Handle lab selection change"""
         if not lab_name or lab_name == "No labs available":
@@ -534,9 +543,9 @@ class LabPage(QWidget):
         self.lab_subtitle.setText(f"Managing: {lab_name}")
 
     def _edit_lab(self):
-            """Edit current lab"""
-            if self.current_lab:
-                self.edit_lab_requested.emit(self.current_lab)
+        """Edit current lab"""
+        if self.current_lab:
+            self.edit_lab_requested.emit(self.current_lab)
 
     def _confirm_delete_lab(self):
         """Confirm and delete current lab"""
@@ -601,3 +610,22 @@ class LabPage(QWidget):
             if self.lab_combo.count() > 0 and self.lab_combo.currentText() != "No labs available":
                 self.current_lab = self.lab_combo.currentText()
                 self._on_lab_changed(self.current_lab)
+
+    # ── NEW: Check all PC online/offline status ───────────────────────────
+    def check_all_pc_status(self):
+        """Ping every loaded PC and update its card colour (green=online, red=offline)"""
+        if not self.cards_by_ip:
+            show_glass_message(self, "No PCs", "Load a lab first", QMessageBox.Warning)
+            return
+
+        ips = list(self.cards_by_ip.keys())
+        results = check_many(ips)
+
+        for ip, ok in results.items():
+            card = self.cards_by_ip.get(ip)
+            if card:
+                if ok:
+                    card.set_status_online()
+                else:
+                    card.set_status_offline()
+    # ─────────────────────────────────────────────────────────────────────
