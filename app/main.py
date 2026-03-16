@@ -11,7 +11,7 @@ from views.dashboard_page import DashboardPage
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self): 
         super().__init__()
         self.setWindowTitle("SYNC")
         self.setMinimumSize(1000, 700)
@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         self.lab.edit_lab_requested.connect(self._go_lab_edit)
 
         self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
+        self.software.back_to_lab.connect(self._back_from_software)
 
         # Central widget
         w = QWidget()
@@ -73,6 +74,9 @@ class MainWindow(QMainWindow):
 
     def _handle_lab_selection(self, lab_name: str):
         self.lab._on_lab_changed(lab_name)
+        self.stack.setCurrentWidget(self.lab)
+
+    def _back_from_software(self):
         self.stack.setCurrentWidget(self.lab)
 
 def main():
