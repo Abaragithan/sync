@@ -60,13 +60,11 @@
               $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
                           ";" +
                           [System.Environment]::GetEnvironmentVariable("Path","User")
-
               $chocoPath = "$env:ProgramData\chocolatey\bin\choco.exe"
               if (-not (Test-Path $chocoPath)) {
                 Write-Error "Chocolatey not found at $chocoPath"
                 exit 1
               }
-
               $packages = "{{ choco_package }}".Trim().Split()
               foreach ($pkg in $packages) {
                 Write-Output "Installing: $pkg"
@@ -146,6 +144,37 @@
             - installer_ext == ".msi"
 
         # ==================================================================
+        # UPDATE (via Chocolatey upgrade)
+        # ==================================================================
+
+        - name: Upgrade package(s) via Chocolatey
+          ansible.windows.win_powershell:
+            script: |
+              $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
+                          ";" +
+                          [System.Environment]::GetEnvironmentVariable("Path","User")
+              $chocoPath = "$env:ProgramData\chocolatey\bin\choco.exe"
+              if (-not (Test-Path $chocoPath)) {
+                Write-Error "Chocolatey not found at $chocoPath"
+                exit 1
+              }
+              $packages = "{{ choco_package }}".Trim().Split()
+              foreach ($pkg in $packages) {
+                Write-Output "Upgrading: $pkg"
+                $result = & $chocoPath upgrade $pkg -y --no-progress 2>&1
+                Write-Output $result
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to upgrade $pkg (exit code $LASTEXITCODE)"
+                  exit $LASTEXITCODE
+                }
+                Write-Output "Successfully upgraded: $pkg"
+              }
+          when:
+            - app_state == "latest"
+            - choco_package is defined
+            - choco_package | length > 0
+
+        # ==================================================================
         # UNINSTALL
         # ==================================================================
 
@@ -156,13 +185,11 @@
               $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
                           ";" +
                           [System.Environment]::GetEnvironmentVariable("Path","User")
-
               $chocoPath = "$env:ProgramData\chocolatey\bin\choco.exe"
               if (-not (Test-Path $chocoPath)) {
                 Write-Error "Chocolatey not found at $chocoPath"
                 exit 1
               }
-
               $packages = "{{ choco_package }}".Trim().Split()
               foreach ($pkg in $packages) {
                 Write-Output "Uninstalling: $pkg"
@@ -313,10 +340,52 @@
     # LINUX LOGIC (DEBIAN/UBUNTU)
     # =========================
     - block:
-        - name: Linux - Install/Uninstall via APT
+
+        # ---------- Install ----------
+        - name: Linux - Install package(s) via APT
           ansible.builtin.apt:
             name: "{{ package_name }}"
-            state: "{{ app_state }}"
+            state: present
             update_cache: yes
+          when: app_state == "present"
+
+        # ---------- Remove ----------
+        - name: Linux - Remove package(s) via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: absent
+            purge: "{{ true if (purge | default('false') | string == 'true') else false }}"
+          when: app_state == "absent"
+
+        - name: Linux - Autoremove orphaned packages
+          ansible.builtin.apt:
+            autoremove: yes
+          when:
+            - app_state == "absent"
+            - autoremove | default('true') | string == 'true'
+
+        # ---------- Update ----------
+        - name: Linux - Update package cache
+          ansible.builtin.apt:
+            update_cache: yes
+          when: app_state == "latest"
+
+        - name: Linux - Upgrade specific package(s) via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: latest
+          when:
+            - app_state == "latest"
+            - package_name is defined
+            - package_name | length > 0
+            - dist_upgrade | default('false') | string == 'false'
+
+        - name: Linux - Full dist-upgrade
+          ansible.builtin.apt:
+            upgrade: dist
+          when:
+            - app_state == "latest"
+            - dist_upgrade | default('false') | string == 'true'
+
       become: yes
       when: ansible_facts["os_family"] == "Debian"

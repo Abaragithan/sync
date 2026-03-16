@@ -2,17 +2,13 @@
 """
 Dynamic action forms – theme-transparent.
 
-All widgets deliberately carry NO colour styling so they inherit cleanly
-from the global DARK_QSS / LIGHT_QSS.  Only structural properties
-(spacing, padding, border-radius) are set inline.
-
 Form matrix
 -----------
 OS       | Action   | Form class
 ---------|----------|------------------
-Windows  | install  | WinInstallForm   – file picker + silent args + reboot
-Windows  | remove   | WinRemoveForm    – chocolatey package name + display name fallback + reboot
-Windows  | update   | WinUpdateForm    – category combo + optional KB + reboot
+Windows  | install  | WinInstallForm   – chocolatey + file picker fallback
+Windows  | remove   | WinRemoveForm    – chocolatey + display name fallback
+Windows  | update   | WinUpdateForm    – chocolatey update + Windows Update
 Linux    | install  | LinuxInstallForm – package name(s) + flags + cache
 Linux    | remove   | LinuxRemoveForm  – package name(s) + purge + autoremove
 Linux    | update   | LinuxUpdateForm  – packages OR dist-upgrade + cache
@@ -30,7 +26,6 @@ from PySide6.QtCore import Signal, Qt, QTimer
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _section(text: str) -> QLabel:
-    """Small caps section label – inherits colour from global QSS SubText."""
     lbl = QLabel(text.upper())
     lbl.setObjectName("SubText")
     lbl.setStyleSheet(
@@ -40,7 +35,6 @@ def _section(text: str) -> QLabel:
 
 
 def _field(placeholder: str = "", read_only: bool = False) -> QLineEdit:
-    """Standard input – NO colour override, inherits QLineEdit rule from QSS."""
     w = QLineEdit()
     w.setPlaceholderText(placeholder)
     w.setReadOnly(read_only)
@@ -49,7 +43,6 @@ def _field(placeholder: str = "", read_only: bool = False) -> QLineEdit:
 
 
 def _hint(text: str) -> QLabel:
-    """Small muted hint label below a field."""
     lbl = QLabel(text)
     lbl.setObjectName("SubText")
     lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.2px; margin-top: -4px;")
@@ -223,7 +216,7 @@ CHOCO_PACKAGES = [
 class ChocoSearchField(QWidget):
     """
     A QLineEdit with instant local search dropdown for Chocolatey packages.
-    Supports multiple packages separated by spaces — searches the last word typed.
+    Supports multiple packages separated by spaces.
     """
 
     def __init__(self, placeholder: str = "e.g.  vlc  notepadplusplus  7zip"):
@@ -236,14 +229,12 @@ class ChocoSearchField(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Input field
         self.input = QLineEdit()
         self.input.setPlaceholderText(placeholder)
         self.input.setStyleSheet("border-radius: 6px; padding: 8px 10px; font-size: 13px;")
         self.input.textChanged.connect(self._on_text_changed)
         layout.addWidget(self.input)
 
-        # Dropdown list
         self._dropdown = QListWidget()
         self._dropdown.setStyleSheet("""
             QListWidget {
@@ -271,7 +262,6 @@ class ChocoSearchField(QWidget):
         self._dropdown.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self._dropdown)
 
-        # Install event filter AFTER all attributes are initialized
         self.input.installEventFilter(self)
         self._dropdown.installEventFilter(self)
 
@@ -429,22 +419,15 @@ class WinInstallForm(_BaseForm):
     def __init__(self):
         super().__init__()
 
-        # ── Chocolatey install with autocomplete ──
         self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  7zip  git")
-        self._add_with_hint(
-            "Chocolatey Package Name(s)  (recommended)",
-            self.choco_input,
-            "Separate multiple packages with spaces. Find names at chocolatey.org/packages",
-        )
+        self._add("Chocolatey Package Name(s)  (recommended)", self.choco_input)
 
-        # ── Divider label ──
         or_lbl = QLabel("── or install from a local file ──")
         or_lbl.setObjectName("SubText")
         or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
         or_lbl.setAlignment(Qt.AlignCenter)
         self._layout.addWidget(or_lbl)
 
-        # ── Local file install (fallback) ──
         self.file_input = _field("No file selected…", read_only=True)
         browse_btn = QPushButton("Browse…")
         browse_btn.setObjectName("SecondaryBtn")
@@ -490,22 +473,15 @@ class WinRemoveForm(_BaseForm):
     def __init__(self):
         super().__init__()
 
-        # ── Chocolatey uninstall with autocomplete ──
         self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  7zip  git")
-        self._add_with_hint(
-            "Chocolatey Package Name(s)  (recommended)",
-            self.choco_input,
-            "Separate multiple packages with spaces. Find names at chocolatey.org/packages",
-        )
+        self._add("Chocolatey Package Name(s)  (recommended)", self.choco_input)
 
-        # ── Divider label ──
         or_lbl = QLabel("── or remove by display name ──")
         or_lbl.setObjectName("SubText")
         or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
         or_lbl.setAlignment(Qt.AlignCenter)
         self._layout.addWidget(or_lbl)
 
-        # ── Registry / display name fallback ──
         self.name_input = _field("e.g.  VLC media player")
         self._add_with_hint(
             "Application Display Name  (fallback)",
@@ -535,31 +511,48 @@ class WinRemoveForm(_BaseForm):
 
 
 class WinUpdateForm(_BaseForm):
-    _CATS = [
-        "All", "SecurityUpdates", "CriticalUpdates", "UpdateRollups",
-        "DefinitionUpdates", "Drivers", "FeaturePacks", "ServicePacks", "Updates",
-    ]
-
     def __init__(self):
         super().__init__()
-        self.cat_combo = self._add_combo("Update Category", self._CATS)
-        self.kb_input  = _field("KB5034441  (blank = all in category)")
-        self._add("Specific KB Article  (optional)", self.kb_input)
-        self.reboot_cb = self._add_check("Allow automatic reboot if required")
-        self.reboot_cb.setChecked(True)
+
+        # ── Chocolatey update (primary) ──
+        self.upgrade_all_cb = QCheckBox("Upgrade ALL Chocolatey packages on the PC")
+        self.upgrade_all_cb.toggled.connect(self._toggle_upgrade_all)
+        self._layout.addWidget(self.upgrade_all_cb)
+
+        self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  git")
+        self._add_with_hint(
+            "Chocolatey Package Name(s)  (specific packages)",
+            self.choco_input,
+            "Leave blank and tick above to upgrade everything.",
+        )
+
+        self.reboot_cb = self._add_check("Reboot targets after update if required")
         self._layout.addStretch()
 
+    def _toggle_upgrade_all(self, checked: bool):
+        self.choco_input.setEnabled(not checked)
+        self.choco_input.input.setPlaceholderText(
+            "Disabled – all packages will be upgraded" if checked
+            else "e.g.  vlc  notepadplusplus  git"
+        )
+
     def reset(self):
-        self.cat_combo.setCurrentIndex(0)
-        self.kb_input.clear()
-        self.reboot_cb.setChecked(True)
+        self.upgrade_all_cb.setChecked(False)
+        self.choco_input.clear()
+        self.choco_input.setEnabled(True)
+        self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
+        upgrade_all = self.upgrade_all_cb.isChecked()
+        choco       = self.choco_input.text().strip()
+        if not upgrade_all and not choco:
+            raise ValidationError("Enter a package name or tick 'Upgrade ALL'.")
         return {
-            "os": "windows", "action": "update",
-            "category": self.cat_combo.currentText(),
-            "kb":       self.kb_input.text().strip(),
-            "reboot":   self.reboot_cb.isChecked(),
+            "os":           "windows",
+            "action":       "update",
+            "choco_package": "all" if upgrade_all else choco,
+            "upgrade_all":  upgrade_all,
+            "reboot":       self.reboot_cb.isChecked(),
         }
 
 
@@ -670,4 +663,4 @@ _REGISTRY = {
 
 def get_form(os_name: str, action: str):
     cls = _REGISTRY.get((os_name.lower(), action.lower()))
-    return cls() if cls else None# views/action_forms.py
+    return cls() if cls else None

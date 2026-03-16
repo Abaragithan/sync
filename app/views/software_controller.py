@@ -108,6 +108,17 @@ class SoftwareController:
             else:
                 extra["app_name"] = app_name
 
+        # ── Windows Update ────────────────────────────────────────────────────
+        elif action == "update" and os_name == "windows":
+            choco_pkg = payload.get("choco_package", "").strip()
+            if not choco_pkg:
+                self.log_panel.append_line(
+                    "✗ Enter a Chocolatey package name or tick 'Upgrade ALL'.", "error"
+                )
+                self._on_execution_finished(ok=False)
+                return
+            extra["choco_package"] = choco_pkg
+
         # ── Linux Install ─────────────────────────────────────────────────────
         elif action == "install" and os_name == "linux":
             pkgs = payload.get("packages", "").strip()
@@ -125,6 +136,16 @@ class SoftwareController:
                 self._on_execution_finished(ok=False)
                 return
             extra["package_name"] = pkgs
+            extra["purge"]        = "true" if payload.get("purge", False) else "false"
+            extra["autoremove"]   = "true" if payload.get("autoremove", True) else "false"
+
+        # ── Linux Update ──────────────────────────────────────────────────────
+        elif action == "update" and os_name == "linux":
+            dist_upgrade = payload.get("dist_upgrade", False)
+            pkgs         = payload.get("packages", "").strip()
+            extra["dist_upgrade"] = "true" if dist_upgrade else "false"
+            if pkgs and not dist_upgrade:
+                extra["package_name"] = pkgs
 
         # ── Write temp inventory ──────────────────────────────────────────────
         tmp_inv = self._write_temp_inventory(
@@ -135,8 +156,6 @@ class SoftwareController:
             self._on_execution_finished(ok=False)
             return
 
-        # inventory is inside project_root/ansible/inventory/ which is
-        # already mounted as /app inside Docker — no separate mount needed
         inv_container_path = "/app/ansible/inventory/_sync_tmp_inventory.ini"
 
         ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
@@ -196,11 +215,9 @@ class SoftwareController:
 
         ansible_dir = os.path.join(project_root, "ansible")
         real_inv    = os.path.join(ansible_dir, "inventory", "hosts.ini")
-
-        # Write inside project ansible/inventory/ — Docker mounts this as /app
-        inv_dir  = os.path.join(ansible_dir, "inventory")
+        inv_dir     = os.path.join(ansible_dir, "inventory")
         os.makedirs(inv_dir, exist_ok=True)
-        tmp_path = os.path.join(inv_dir, "_sync_tmp_inventory.ini")
+        tmp_path    = os.path.join(inv_dir, "_sync_tmp_inventory.ini")
 
         group_vars_lines: list[str] = []
         if os.path.exists(real_inv):
