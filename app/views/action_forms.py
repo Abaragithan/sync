@@ -473,28 +473,16 @@ class WinRemoveForm(_BaseForm):
         super().__init__()
 
         self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  7zip  git")
-        self._add("Chocolatey Package Name(s)  (recommended)", self.choco_input)
-
-        or_lbl = QLabel("── or remove by display name ──")
-        or_lbl.setObjectName("SubText")
-        or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
-        or_lbl.setAlignment(Qt.AlignCenter)
-        self._layout.addWidget(or_lbl)
+        self._add("Chocolatey Package Name(s)", self.choco_input)
 
         self.name_input = _field("e.g.  VLC media player")
-        self._add_with_hint(
-            "Application Display Name  (fallback)",
-            self.name_input,
-            "Used only when no Chocolatey name is given. Must match the name shown in Add/Remove Programs.",
-        )
+        self._add("Application Display Name", self.name_input)
 
-        self.reboot_cb = self._add_check("Reboot targets after removal")
         self._layout.addStretch()
 
     def reset(self):
         self.choco_input.clear()
         self.name_input.clear()
-        self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
         choco = self.choco_input.text().strip()
@@ -505,7 +493,7 @@ class WinRemoveForm(_BaseForm):
             "os": "windows", "action": "remove",
             "choco_package": choco,
             "app_name":      name,
-            "reboot":        self.reboot_cb.isChecked(),
+            "reboot":        False,
         }
 
 
@@ -513,45 +501,24 @@ class WinUpdateForm(_BaseForm):
     def __init__(self):
         super().__init__()
 
-        # ── Chocolatey update (primary) ──
-        self.upgrade_all_cb = QCheckBox("Upgrade ALL Chocolatey packages on the PC")
-        self.upgrade_all_cb.toggled.connect(self._toggle_upgrade_all)
-        self._layout.addWidget(self.upgrade_all_cb)
-
         self.choco_input = ChocoSearchField("e.g.  vlc  notepadplusplus  git")
-        self._add_with_hint(
-            "Chocolatey Package Name(s)  (specific packages)",
-            self.choco_input,
-            "Leave blank and tick above to upgrade everything.",
-        )
+        self._add("Chocolatey Package Name(s)", self.choco_input)
 
-        self.reboot_cb = self._add_check("Reboot targets after update if required")
         self._layout.addStretch()
 
-    def _toggle_upgrade_all(self, checked: bool):
-        self.choco_input.setEnabled(not checked)
-        self.choco_input.input.setPlaceholderText(
-            "Disabled – all packages will be upgraded" if checked
-            else "e.g.  vlc  notepadplusplus  git"
-        )
-
     def reset(self):
-        self.upgrade_all_cb.setChecked(False)
         self.choco_input.clear()
-        self.choco_input.setEnabled(True)
-        self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
-        upgrade_all = self.upgrade_all_cb.isChecked()
         choco       = self.choco_input.text().strip()
-        if not upgrade_all and not choco:
-            raise ValidationError("Enter a package name or tick 'Upgrade ALL'.")
+        if not choco:
+            raise ValidationError("Enter at least one package name.")
         return {
             "os":           "windows",
             "action":       "update",
-            "choco_package": "all" if upgrade_all else choco,
-            "upgrade_all":  upgrade_all,
-            "reboot":       self.reboot_cb.isChecked(),
+            "choco_package": choco,
+            "upgrade_all":  False,
+            "reboot":       False,
         }
 
 
@@ -587,15 +554,10 @@ class LinuxRemoveForm(_BaseForm):
         super().__init__()
         self.pkg_input     = _field("vlc  git")
         self._add("Package Name(s)", self.pkg_input)
-        self.purge_cb      = self._add_check("Purge configuration files  (--purge)")
-        self.autoremove_cb = self._add_check("Run autoremove after removal")
-        self.autoremove_cb.setChecked(True)
         self._layout.addStretch()
 
     def reset(self):
         self.pkg_input.clear()
-        self.purge_cb.setChecked(False)
-        self.autoremove_cb.setChecked(True)
 
     def _collect(self) -> dict:
         p = self.pkg_input.text().strip()
@@ -604,44 +566,27 @@ class LinuxRemoveForm(_BaseForm):
         return {
             "os": "linux", "action": "remove",
             "packages":   p,
-            "purge":      self.purge_cb.isChecked(),
-            "autoremove": self.autoremove_cb.isChecked(),
+            "purge":      False,
+            "autoremove": True,
         }
 
 
 class LinuxUpdateForm(_BaseForm):
     def __init__(self):
         super().__init__()
-        self.dist_upgrade_cb = QCheckBox("Full dist-upgrade  (update all packages)")
-        self.dist_upgrade_cb.toggled.connect(self._toggle_dist)
-        self._layout.addWidget(self.dist_upgrade_cb)
-
-        self.pkg_input = _field("firefox  libc6   (blank = all installed)")
-        self._add("Specific Package(s)  (optional)", self.pkg_input)
-
-        self.cache_cb = self._add_check("Update package cache first")
-        self.cache_cb.setChecked(True)
+        self.pkg_input = _field("firefox  libc6")
+        self._add("Specific Package(s)", self.pkg_input)
         self._layout.addStretch()
 
-    def _toggle_dist(self, checked: bool):
-        self.pkg_input.setEnabled(not checked)
-        self.pkg_input.setPlaceholderText(
-            "Disabled – all packages will be upgraded" if checked
-            else "firefox  libc6   (blank = all installed)"
-        )
-
     def reset(self):
-        self.dist_upgrade_cb.setChecked(False)
         self.pkg_input.clear()
-        self.pkg_input.setEnabled(True)
-        self.cache_cb.setChecked(True)
 
     def _collect(self) -> dict:
         return {
             "os": "linux", "action": "update",
-            "dist_upgrade": self.dist_upgrade_cb.isChecked(),
+            "dist_upgrade": False,
             "packages":     self.pkg_input.text().strip(),
-            "update_cache": self.cache_cb.isChecked(),
+            "update_cache": True,
         }
 
 

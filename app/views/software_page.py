@@ -15,6 +15,7 @@ from views.software_widgets import StepProgressBar, LogPanel
 from views.software_controller import SoftwareController
 
 import os
+import re
 
 
 # =============================================================================
@@ -349,30 +350,61 @@ class SoftwarePage(QWidget):
     def _on_execution_done(self, ok: bool, log_lines: list[str]):
         results: dict[str, bool] = {}
         in_recap = False
+
+        ansi_re = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+        host_state_re = re.compile(
+            r"^(ok|changed|fatal|unreachable|failed):\s*\[([^\]]+)\]",
+            re.IGNORECASE,
+        )
+        recap_re = re.compile(
+            r"^(\S+)\s*:\s+.*\bunreachable=(\d+)\b.*\bfailed=(\d+)\b",
+            re.IGNORECASE,
+        )
+
+        def _norm_host(host: str) -> str:
+            h = host.strip().strip("'\"").rstrip(":")
+            # Normalize host:port commonly seen in some failure lines.
+            if h.count(":") == 1:
+                left, right = h.split(":", 1)
+                if right.isdigit() and left.count(".") == 3:
+                    h = left
+            return h
+
         for line in log_lines:
-            stripped = line.strip()
-            if "PLAY RECAP" in stripped:
+            stripped = ansi_re.sub("", line).strip()
+            if not stripped:
+                continue
+
+            if "PLAY RECAP" in stripped.upper():
                 in_recap = True
                 continue
+
+            # Fallback parser for host-state lines (works even if recap format varies).
+            m_state = host_state_re.match(stripped)
+            if m_state:
+                state = m_state.group(1).lower()
+                host = _norm_host(m_state.group(2))
+                if state in ("fatal", "unreachable", "failed"):
+                    results[host] = False
+                elif host not in results:
+                    results[host] = True
+
             if in_recap and stripped:
-                # Format: 10.20.9.156  : ok=3  changed=2  unreachable=0  failed=0
-                parts = stripped.split()
-                if len(parts) >= 2 and ":" in stripped:
-                    ip = parts[0]
-                    failed      = 0
-                    unreachable = 0
-                    for part in parts:
-                        if part.startswith("failed="):
-                            try:
-                                failed = int(part.split("=")[1])
-                            except ValueError:
-                                pass
-                        if part.startswith("unreachable="):
-                            try:
-                                unreachable = int(part.split("=")[1])
-                            except ValueError:
-                                pass
-                    results[ip] = (failed == 0 and unreachable == 0)
+                # Example: 10.20.9.156 : ok=3 changed=2 unreachable=0 failed=0
+                m_recap = recap_re.match(stripped)
+                if m_recap:
+                    host = _norm_host(m_recap.group(1))
+                    unreachable = int(m_recap.group(2))
+                    failed = int(m_recap.group(3))
+                    results[host] = (failed == 0 and unreachable == 0)
+
+        # If execution failed before host-level output (e.g., parser/module error),
+        # still show the selected targets in View Results instead of "0 targeted".
+        if not results and not ok:
+            for host in self.state.selected_targets:
+                if host:
+                    results[host] = False
+
         self._execution_results = results
 
     def on_page_show(self):

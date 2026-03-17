@@ -18,7 +18,7 @@ class PcCard(QFrame):
     SELECTED_COLOR = "#007acc"
     ONLINE_COLOR   = "#22c55e"   # Windows → green
     LINUX_COLOR    = "#d4a017"  # Linux → yellow
-    OFFLINE_COLOR  = "#9F9F9F"   
+    OFFLINE_COLOR  = "#ef4444"   # Failed -> red
 
     def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc2.png"):
         super().__init__()
@@ -110,6 +110,10 @@ class PcCard(QFrame):
     def set_status_windows(self):
         self.status_color = "windows"
         self._refresh_icon()
+
+    def set_status_online(self):
+        """Backward-compatible alias used by OperationStatusPage."""
+        self.set_status_windows()
 
     def set_status_linux(self):
         self.status_color = "linux"
