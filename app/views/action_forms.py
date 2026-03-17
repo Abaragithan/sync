@@ -427,6 +427,7 @@ class WinInstallForm(_BaseForm):
         or_lbl.setStyleSheet("font-size: 10px; letter-spacing: 0.5px; margin: 4px 0;")
         or_lbl.setAlignment(Qt.AlignCenter)
         self._layout.addWidget(or_lbl)
+        or_lbl.hide()
 
         self.file_input = _field("No file selected…", read_only=True)
         browse_btn = QPushButton("Browse…")
@@ -438,7 +439,6 @@ class WinInstallForm(_BaseForm):
         self.args_input = _field("/S  /quiet  /norestart")
         self._add("Silent Install Arguments  (optional – for local file only)", self.args_input)
 
-        self.reboot_cb = self._add_check("Reboot targets after installation")
         self._layout.addStretch()
 
     def _browse(self):
@@ -453,7 +453,6 @@ class WinInstallForm(_BaseForm):
         self.choco_input.clear()
         self.file_input.clear()
         self.args_input.clear()
-        self.reboot_cb.setChecked(False)
 
     def _collect(self) -> dict:
         choco = self.choco_input.text().strip()
@@ -465,7 +464,7 @@ class WinInstallForm(_BaseForm):
             "choco_package": choco,
             "file":          f,
             "args":          self.args_input.text().strip(),
-            "reboot":        self.reboot_cb.isChecked(),
+            "reboot":        False,
         }
 
 
@@ -565,14 +564,11 @@ class LinuxInstallForm(_BaseForm):
         self._add("Package Name(s)", self.pkg_input)
         self.flags_input = _field("--no-install-recommends")
         self._add("Extra Flags  (optional)", self.flags_input)
-        self.cache_cb = self._add_check("Update package cache before installing")
-        self.cache_cb.setChecked(True)
         self._layout.addStretch()
 
     def reset(self):
         self.pkg_input.clear()
         self.flags_input.clear()
-        self.cache_cb.setChecked(True)
 
     def _collect(self) -> dict:
         p = self.pkg_input.text().strip()
@@ -582,7 +578,7 @@ class LinuxInstallForm(_BaseForm):
             "os": "linux", "action": "install",
             "packages":     p,
             "flags":        self.flags_input.text().strip(),
-            "update_cache": self.cache_cb.isChecked(),
+            "update_cache": True,
         }
 
 
