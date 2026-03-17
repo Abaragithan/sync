@@ -45,6 +45,8 @@ Write-Host ""
 # ─────────────────────────────────────────────
 Write-Step 1 $TOTAL_STEPS "Installing OpenSSH Server..."
 
+netsh advfirewall firewall add rule name="Allow ICMPv4 Ping" protocol=icmpv4:8,any dir=in action=allow
+
 $sshCap = Get-WindowsCapability -Online | Where-Object { $_.Name -like "OpenSSH.Server*" }
 if ($sshCap.State -ne "Installed") {
   Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
