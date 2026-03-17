@@ -510,7 +510,8 @@ Restart-Service sshd
 4. **Rotate SSH keys** regularly and update `administrators_authorized_keys` on all clients
 5. **Use dedicated service accounts** with minimal required permissions where possible
 
-# Project Structure
+## Project Structure
+
 ```text
 sync/
 ├── ansible/
@@ -571,7 +572,6 @@ sync/
 ├── run.ps1
 ├── run.sh
 └── setup-openssh-ansible.ps1
-
 ```
 
 # Contributors
