@@ -59,6 +59,7 @@ The system provides a graphical interface that allows administrators to run auto
   - Linux clients
 
 ## Architecture Diagrams
+```text
 +----------------------+
 |    User (Admin)      |
 +----------+-----------+
@@ -87,6 +88,7 @@ The system provides a graphical interface that allows administrators to run auto
 |  Windows   | |   Linux    |
 |  Clients   | |  Clients   |
 +------------+ +------------+
+```
 # Technologies Used
 
 ## Programming Languages
