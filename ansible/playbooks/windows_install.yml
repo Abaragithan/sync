@@ -1,0 +1,126 @@
+---
+- name: Windows - Install Software
+  hosts: all
+  gather_facts: yes
+
+  vars:
+    app_profiles:
+      matlab:
+        install_args: "-mode silent -agreeToLicense yes"
+      vscode:
+        install_args: "/VERYSILENT /SUPPRESSMSGBOXES /MERGETASKS=!runcode"
+      notepadplusplus:
+        install_args: "/S"
+      python:
+        install_args: "/quiet InstallAllUsers=1 PrependPath=1"
+      git:
+        install_args: "/VERYSILENT /NORESTART"
+      nodejs:
+        install_args: "/qn /norestart"
+
+  tasks:
+    - block:
+
+        # ------------------------------------------------------------------
+        # Ensure Chocolatey is installed
+        # ------------------------------------------------------------------
+        - name: Ensure Chocolatey is installed
+          ansible.windows.win_powershell:
+            script: |
+              if (-not (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe")) {
+                Set-ExecutionPolicy Bypass -Scope Process -Force
+                [System.Net.ServicePointManager]::SecurityProtocol =
+                  [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+                iex ((New-Object System.Net.WebClient).DownloadString(
+                  'https://community.chocolatey.org/install.ps1'))
+              }
+              $chocoPath = "$env:ProgramData\chocolatey\bin\choco.exe"
+              Write-Output "Chocolatey ready: $(& $chocoPath --version)"
+          when:
+            - choco_package is defined
+            - choco_package | length > 0
+
+        # ---------- Chocolatey install (primary) ----------
+        - name: Install package(s) via Chocolatey
+          ansible.windows.win_powershell:
+            script: |
+              $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
+                          ";" +
+                          [System.Environment]::GetEnvironmentVariable("Path","User")
+              $chocoPath = "$env:ProgramData\chocolatey\bin\choco.exe"
+              if (-not (Test-Path $chocoPath)) {
+                Write-Error "Chocolatey not found at $chocoPath"
+                exit 1
+              }
+              $packages = "{{ choco_package }}".Trim().Split()
+              foreach ($pkg in $packages) {
+                Write-Output "Installing: $pkg"
+                $result = & $chocoPath install $pkg -y --no-progress 2>&1
+                Write-Output $result
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to install $pkg (exit code $LASTEXITCODE)"
+                  exit $LASTEXITCODE
+                }
+                Write-Output "Successfully installed: $pkg"
+              }
+          when:
+            - choco_package is defined
+            - choco_package | length > 0
+
+        # ---------- Local file install (fallback) ----------
+        - name: Ensure C:\Temp exists
+          ansible.windows.win_file:
+            path: C:\Temp
+            state: directory
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - file_name is defined
+            - file_name | length > 0
+
+        - name: Copy installer to Windows
+          ansible.windows.win_copy:
+            src: "{{ playbook_dir }}/../../software_repo/{{ file_name }}"
+            dest: "C:\\Temp\\{{ file_name }}"
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - file_name is defined
+            - file_name | length > 0
+
+        - name: Detect installer type
+          ansible.builtin.set_fact:
+            installer_ext: "{{ file_name | regex_search('\\.(exe|msi|appx|msix)$') }}"
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - file_name is defined
+            - file_name | length > 0
+
+        - name: Get custom install args if defined
+          ansible.builtin.set_fact:
+            custom_install_args: "{{ app_profiles[app_name].install_args | default('') }}"
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - app_name is defined
+
+        - name: Install Windows application (EXE)
+          ansible.windows.win_package:
+            path: "C:\\Temp\\{{ file_name }}"
+            state: present
+            arguments: "{{ custom_install_args | default('/S') }}"
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - file_name is defined
+            - file_name | length > 0
+            - installer_ext == ".exe"
+
+        - name: Install Windows application (MSI)
+          ansible.windows.win_package:
+            path: "C:\\Temp\\{{ file_name }}"
+            state: present
+            arguments: "{{ custom_install_args | default('/qn /norestart') }}"
+          when:
+            - choco_package is not defined or choco_package | length == 0
+            - file_name is defined
+            - file_name | length > 0
+            - installer_ext == ".msi"
+
+      when: ansible_facts["os_family"] == "Windows"

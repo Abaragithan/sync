@@ -1,0 +1,16 @@
+---
+- name: Linux - Install Software
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - block:
+
+        - name: Install package(s) via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: present
+            update_cache: yes
+
+      become: yes
+      when: ansible_facts["os_family"] == "Debian"

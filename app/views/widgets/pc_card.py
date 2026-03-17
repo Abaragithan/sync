@@ -16,8 +16,9 @@ class PcCard(QFrame):
 
     NORMAL_COLOR   = "#9F9F9F"
     SELECTED_COLOR = "#007acc"
-    ONLINE_COLOR   = "#22c55e"   # green
-    OFFLINE_COLOR  = "#ef4444"   # red
+    ONLINE_COLOR   = "#22c55e"   # Windows → green
+    LINUX_COLOR    = "#d4a017"  # Linux → yellow
+    OFFLINE_COLOR  = "#9F9F9F"   
 
     def __init__(self, name: str, ip: str, icon_rel_path: str = "assets/pc2.png"):
         super().__init__()
@@ -76,8 +77,12 @@ class PcCard(QFrame):
         selected > online > offline > normal"""
         if self.selected:
             return self.SELECTED_COLOR
-        if self.status_color == "green":
+        if self.status_color == "windows":
             return self.ONLINE_COLOR
+        if self.status_color == "linux":
+            return self.LINUX_COLOR
+        if self.status_color == "offline":
+            return self.OFFLINE_COLOR
         if self.status_color == "red":
             return self.OFFLINE_COLOR
         return self.NORMAL_COLOR
@@ -102,14 +107,16 @@ class PcCard(QFrame):
         self.toggled.emit(self.ip, value)
 
     # ── Status (online / offline) ─────────────────────────────────────────
-    def set_status_online(self):
-        """Tint icon green — PC is reachable."""
-        self.status_color = "green"
+    def set_status_windows(self):
+        self.status_color = "windows"
+        self._refresh_icon()
+
+    def set_status_linux(self):
+        self.status_color = "linux"
         self._refresh_icon()
 
     def set_status_offline(self):
-        """Tint icon red — PC is unreachable."""
-        self.status_color = "red"
+        self.status_color = "offline"
         self._refresh_icon()
 
     def clear_status(self):

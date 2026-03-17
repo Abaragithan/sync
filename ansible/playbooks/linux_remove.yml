@@ -1,0 +1,22 @@
+---
+- name: Linux - Remove Software
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - block:
+
+        - name: Remove package(s) via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: absent
+            purge: "{{ true if (purge | default('false') | string == 'true') else false }}"
+
+        - name: Autoremove orphaned packages
+          ansible.builtin.apt:
+            autoremove: yes
+          when:
+            - autoremove | default('true') | string == 'true'
+
+      become: yes
+      when: ansible_facts["os_family"] == "Debian"

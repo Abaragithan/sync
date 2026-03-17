@@ -621,11 +621,18 @@ class LabPage(QWidget):
         ips = list(self.cards_by_ip.keys())
         results = check_many(ips)
 
-        for ip, ok in results.items():
+        for ip, (ok, os_type) in results.items():
             card = self.cards_by_ip.get(ip)
-            if card:
-                if ok:
-                    card.set_status_online()
-                else:
-                    card.set_status_offline()
+
+            if not card:
+                continue
+
+            if not ok:
+                card.set_status_offline()
+            elif os_type == "windows":
+                card.set_status_windows()
+            elif os_type == "linux":
+                card.set_status_linux()
+            else:
+                card.clear_status()
     # ─────────────────────────────────────────────────────────────────────

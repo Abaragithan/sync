@@ -15,6 +15,7 @@
 #     -e "main_exe=CheatShieldClient_0_1_5.exe" \
 #     -e "tokens_csv=tokens.csv"
 
+
 - name: Register Cheat Shield with Per-PC Token
   hosts: windows_clients
   gather_facts: false
@@ -35,9 +36,15 @@
       set_fact:
         all_tokens: "{{ lookup('file', playbook_dir + '/../files/' + tokens_csv) | split('\n') | select('match', '^PC-') | list }}"
 
-    - name: Build PC label from this host's IP (e.g. 10.20.9.1 -> PC-001)
+    - name: Auto-generate PC label from inventory IP
       set_fact:
-        pc_label: "PC-{{ '%03d' | format(inventory_hostname.split('.')[-1] | int) }}"
+        pc_label: "PC-{{ '%03d' | format(inventory_hostname.split('.')[-1] | int - 160 + 71) }}"
+      # Explanation:
+      # IP 10.20.9.161 → PC-071
+      # IP 10.20.9.162 → PC-072
+      # IP 10.20.9.163 → PC-073
+      # IP 10.20.9.164 → PC-074
+      # IP 10.20.9.165 → PC-075
 
     - name: Find matching token row for this host
       set_fact:

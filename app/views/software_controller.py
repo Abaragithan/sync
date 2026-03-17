@@ -8,6 +8,17 @@ from typing import Callable
 from core.ansible_worker import AnsibleWorker
 
 
+# Playbook routing map — (os, action) -> playbook filename
+_PLAYBOOK_MAP = {
+    ("windows", "install"): "playbooks/windows_install.yml",
+    ("windows", "remove"):  "playbooks/windows_remove.yml",
+    ("windows", "update"):  "playbooks/windows_update.yml",
+    ("linux",   "install"): "playbooks/linux_install.yml",
+    ("linux",   "remove"):  "playbooks/linux_remove.yml",
+    ("linux",   "update"):  "playbooks/linux_update.yml",
+}
+
+
 def _get_project_root() -> str:
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
@@ -32,6 +43,7 @@ class SoftwareController:
         self._worker: AnsibleWorker | None = None
         self._last_payload: dict | None = None
         self._log_lines: list[str] = []
+        self._in_recap: bool = False
         # Set by SoftwarePage to receive (ok, log_lines) after execution
         self._on_execution_finished_callback: Callable | None = None
 
@@ -41,6 +53,7 @@ class SoftwareController:
     def run(self, payload: dict):
         self._last_payload = payload
         self._log_lines = []
+        self._in_recap = False
         self.log_panel.clear()
         self._run_ansible(payload)
 
@@ -48,6 +61,7 @@ class SoftwareController:
         if self._last_payload is None:
             return
         self._log_lines = []
+        self._in_recap = False
         self.progress_bar.set_step("executing")
         self.execute_btn.setEnabled(False)
         self.execute_btn.setText("Executing...")
@@ -67,12 +81,8 @@ class SoftwareController:
         vault_pass   = os.path.expanduser("~/.ansible_vault_pass")
         sw_repo      = os.path.join(project_root, "software_repo")
 
-        app_state_map = {"install": "present", "remove": "absent", "update": "latest"}
-        app_state = app_state_map.get(action, "present")
-
         target_host = "windows_clients" if os_name == "windows" else "linux_clients"
         extra: dict[str, str] = {
-            "app_state":   app_state,
             "target_host": target_host,
         }
 
@@ -153,6 +163,15 @@ class SoftwareController:
             if pkgs and not dist_upgrade:
                 extra["package_name"] = pkgs
 
+        # ── Resolve playbook ──────────────────────────────────────────────────
+        playbook = _PLAYBOOK_MAP.get((os_name, action))
+        if not playbook:
+            self.log_panel.append_line(
+                f"✗ No playbook defined for {os_name} / {action}.", "error"
+            )
+            self._on_execution_finished(ok=False)
+            return
+
         # ── Write temp inventory ──────────────────────────────────────────────
         tmp_inv = self._write_temp_inventory(
             project_root, targets, os_name, target_host
@@ -163,15 +182,15 @@ class SoftwareController:
             return
 
         inv_container_path = "/app/ansible/inventory/_sync_tmp_inventory.ini"
-
         ev_str = " ".join(f"{k}={v}" for k, v in extra.items())
 
         self.log_panel.append_line(
             f"▶ ansible-playbook  [{action.upper()} / {os_name.upper()}]"
             f"  →  {len(targets)} host(s)", "dim"
         )
-        self.log_panel.append_line(f"  Hosts : {', '.join(targets)}", "dim")
-        self.log_panel.append_line(f"  Vars  : {ev_str}", "dim")
+        self.log_panel.append_line(f"  Hosts    : {', '.join(targets)}", "dim")
+        self.log_panel.append_line(f"  Playbook : {playbook}", "dim")
+        self.log_panel.append_line(f"  Vars     : {ev_str}", "dim")
         self.log_panel.append_line("", "dim")
 
         cmd = [
@@ -191,7 +210,7 @@ class SoftwareController:
             "sync-ansible:latest",
             "ansible-playbook",
             "-i", inv_container_path,
-            "playbooks/master_deploy_v2.yml",
+            playbook,
             "-e", ev_str,
         ]
 
@@ -270,11 +289,30 @@ class SoftwareController:
     def _on_ansible_line(self, line: str):
         self._log_lines.append(line)
         low = line.lower()
+
         if "play recap" in low:
+            self._in_recap = True
             self.log_panel.append_line(line, "dim")
-        elif (
-            "failed=0" in low and "unreachable=0" in low
-        ) or low.startswith("ok:") or low.startswith("changed:"):
+            return
+
+        if self._in_recap and line.strip():
+            # Host recap line: "10.20.9.1  : ok=3 changed=2 unreachable=0 failed=0"
+            failed      = 0
+            unreachable = 0
+            for part in line.split():
+                if part.startswith("failed="):
+                    try: failed = int(part.split("=")[1])
+                    except ValueError: pass
+                if part.startswith("unreachable="):
+                    try: unreachable = int(part.split("=")[1])
+                    except ValueError: pass
+            if failed == 0 and unreachable == 0:
+                self.log_panel.append_line(line, "success")
+            else:
+                self.log_panel.append_line(line, "error")
+            return
+
+        if low.startswith("ok:") or low.startswith("changed:"):
             self.log_panel.append_line(line, "success")
         elif any(kw in low for kw in ("fatal:", "error", "failed!", "unreachable")):
             self.log_panel.append_line(line, "error")

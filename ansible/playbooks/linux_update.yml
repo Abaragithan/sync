@@ -1,0 +1,29 @@
+---
+- name: Linux - Update Software
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - block:
+
+        - name: Update package cache
+          ansible.builtin.apt:
+            update_cache: yes
+
+        - name: Upgrade specific package(s) via APT
+          ansible.builtin.apt:
+            name: "{{ package_name }}"
+            state: latest
+          when:
+            - package_name is defined
+            - package_name | length > 0
+            - dist_upgrade | default('false') | string == 'false'
+
+        - name: Full dist-upgrade
+          ansible.builtin.apt:
+            upgrade: dist
+          when:
+            - dist_upgrade | default('false') | string == 'true'
+
+      become: yes
+      when: ansible_facts["os_family"] == "Debian"

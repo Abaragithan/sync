@@ -5,34 +5,52 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 IS_WINDOWS = platform.system().lower() == "windows"
 
 
-def ping_host(ip: str) -> bool:
-    """
-    Return True if host reachable, else False.
-    Timeout: 1 second max per ping.
-    """
+def detect_os_from_ping(output: str) -> str:
+    output = output.lower()
 
+    if "ttl=" in output:
+        try:
+            ttl = int(output.split("ttl=")[1].split()[0])
+
+            if ttl >= 100:
+                return "windows"
+            else:
+                return "linux"
+
+        except Exception:
+            return "unknown"
+
+    return "unknown"
+
+
+def ping_host(ip: str) -> tuple[bool, str]:
     if IS_WINDOWS:
-        cmd = ["ping", "-n", "1", "-w", "1000", ip]  # 1000 ms
+        cmd = ["ping", "-n", "1", "-w", "1000", ip]
     else:
-        cmd = ["ping", "-c", "1", "-W", "1", ip]  # 1 second
+        cmd = ["ping", "-c", "1", "-W", "1", ip]
 
     try:
         result = subprocess.run(
             cmd,
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            text=True
         )
-        return result.returncode == 0
+
+        reachable = result.returncode == 0
+
+        if reachable:
+            os_type = detect_os_from_ping(result.stdout)
+        else:
+            os_type = "unknown"
+
+        return reachable, os_type
+
     except Exception:
-        return False
+        return False, "unknown"
 
 
 def check_many(hosts: list[str], max_workers: int = 50) -> dict:
-    """
-    Ping all hosts IN PARALLEL using a thread pool.
-    return { ip : True/False }
-    """
-
     if not hosts:
         return {}
 
@@ -47,8 +65,8 @@ def check_many(hosts: list[str], max_workers: int = 50) -> dict:
         for future in as_completed(future_to_ip):
             ip = future_to_ip[future]
             try:
-                results[ip] = future.result()
+                results[ip] = future.result()  # (reachable, os)
             except Exception:
-                results[ip] = False
+                results[ip] = (False, "unknown")
 
     return results

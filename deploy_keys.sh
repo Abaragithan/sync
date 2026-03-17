@@ -1,7 +1,7 @@
 #!/bin/bash
 
-USER="labuser"
-PASSWORD="labpassword"
+USER="dcsuser"
+PASSWORD="CompUser123@"
 JSON_FILE="data/inventory.json"
 
 echo "Reading inventory..."
