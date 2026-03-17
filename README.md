@@ -59,34 +59,34 @@ The system provides a graphical interface that allows administrators to run auto
   - Linux clients
 
 ## Architecture Diagrams
-
-                +----------------------+
-                |   User (Admin)       |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |  PySide6 Dashboard   |
-                |   (GUI Interface)    |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |  Docker Container    |
-                |   (Ansible Engine)   |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |   SSH Connections    |
-                +----------+-----------+
-                           |
-            +--------------+--------------+
-            |                             |
-            v                             v
-   +------------------+        +------------------+
-   | Windows Clients  |        |  Linux Clients   |
-   +------------------+        +------------------+
++----------------------+
+|    User (Admin)      |
++----------+-----------+
+           |
+           v
++----------------------+
+|  PySide6 Dashboard   |
+|   (GUI Interface)    |
++----------+-----------+
+           |
+           v
++----------------------+
+|  Docker Container    |
+|   (Ansible Engine)   |
++----------+-----------+
+           |
+           v
++----------------------+
+|   SSH Connections    |
++----------+-----------+
+           |
+     +-----+-----+
+     |           |
+     v           v
++------------+ +------------+
+|  Windows   | |   Linux    |
+|  Clients   | |  Clients   |
++------------+ +------------+
 # Technologies Used
 
 ## Programming Languages
