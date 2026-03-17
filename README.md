@@ -514,64 +514,75 @@ Restart-Service sshd
 
 ```text
 sync/
-├── ansible/
-│   ├── inventory/
-│   │   └── group_vars/
-│   │       └── windows_clients/
-│   └── playbooks/
-│       └── master_deploy_v2.yml
-├── app/
-│   ├── assets/
-│   │   ├── icon.ico
-│   │   ├── icon.png
-│   │   └── pc2.png
-│   ├── core/
-│   │   ├── ansible_worker.py
-│   │   ├── app_state.py
-│   │   ├── config.py
-│   │   ├── inventory_manager.py
-│   │   └── __init__.py
-│   ├── ui/
-│   │   ├── theme.py
-│   │   └── __init__.py
-│   ├── views/
-│   │   ├── dialogs/
-│   │   │   ├── add_pc_dialog.py
-│   │   │   ├── bulk_ip_dialog.py
-│   │   │   ├── confirm_delete_dialog.py
-│   │   │   ├── create_lab_dialog.py
-│   │   │   ├── dialog_base.py
-│   │   │   ├── edit_pc_ip_dialog.py
-│   │   │   └── glass_messagebox.py
-│   │   ├── widgets/
-│   │   │   └── pc_card.py
-│   │   ├── action_forms.py
-│   │   ├── create_lab_dialog.py
-│   │   ├── dashboard_page.py
-│   │   ├── lab_edit_page.py
-│   │   ├── lab_page.py
-│   │   ├── software_controller.py
-│   │   ├── software_page.py
-│   │   ├── software_theme.py
-│   │   ├── software_widgets.py
-│   │   └── welcome_page.py
-│   ├── main.py
-│   └── __init__.py
-├── data/
-│   └── inventory.json
-├── software_repo/
-│   └── jdk-25_windows-x64_bin.msi
-├── ansible.cfg
-├── build.bat
-├── build.sh
-├── Dockerfile
-├── LICENSE
-├── README.md
-├── requirements-docker.txt
-├── requirements-gui.txt
-├── run.ps1
-├── run.sh
-└── setup-openssh-ansible.ps1
+|-- ansible/
+|   |-- files/
+|   |   |-- CheatShieldClient_0_1_10.exe
+|   |   |-- nssm.exe
+|   |   `-- tokens.csv
+|   `-- playbooks/
+|       |-- deploy_cheatshield_install.yml
+|       |-- deploy_cheatshield_register.yml
+|       |-- linux_install.yml
+|       |-- linux_remove.yml
+|       |-- linux_update.yml
+|       |-- master_deploy_v2.yml
+|       |-- windows_install.yml
+|       |-- windows_remove.yml
+|       `-- windows_update.yml
+|-- app/
+|   |-- assets/
+|   |   |-- icon.ico
+|   |   |-- icon.png
+|   |   `-- pc2.png
+|   |-- core/
+|   |   |-- ansible_worker.py
+|   |   |-- app_state.py
+|   |   |-- config.py
+|   |   |-- inventory_manager.py
+|   |   |-- ping_service.py
+|   |   `-- __init__.py
+|   |-- ui/
+|   |   |-- theme.py
+|   |   `-- __init__.py
+|   |-- views/
+|   |   |-- dialogs/
+|   |   |   |-- add_pc_dialog.py
+|   |   |   |-- bulk_ip_dialog.py
+|   |   |   |-- confirm_delete_dialog.py
+|   |   |   |-- create_lab_dialog.py
+|   |   |   |-- dialog_base.py
+|   |   |   |-- edit_lab_dialog.py
+|   |   |   |-- edit_pc_ip_dialog.py
+|   |   |   `-- glass_messagebox.py
+|   |   |-- widgets/
+|   |   |   `-- pc_card.py
+|   |   |-- action_forms.py
+|   |   |-- create_lab_dialog.py
+|   |   |-- dashboard_page.py
+|   |   |-- lab_edit_page.py
+|   |   |-- lab_page.py
+|   |   |-- operation_status_page.py
+|   |   |-- software_controller.py
+|   |   |-- software_page.py
+|   |   |-- software_theme.py
+|   |   |-- software_widgets.py
+|   |   `-- welcome_page.py
+|   |-- main.py
+|   `-- __init__.py
+|-- data/
+|   `-- inventory.json
+|-- ansible.cfg
+|-- build.bat
+|-- build.sh
+|-- deploy_keys.sh
+|-- Dockerfile
+|-- LICENSE
+|-- README.md
+|-- requirements-docker.txt
+|-- requirements-gui.txt
+|-- run.ps1
+|-- run.sh
+`-- setup-openssh-ansible.ps1
 ```
 
 # Contributors
@@ -579,36 +590,28 @@ sync/
 ```text
 K. Yathusiga (2021/SP/068)
 Email: yathu2708@gmail.com
-- Designed user interface for lab management
-- Designed user interface for individual client management
-- Designed popup alerts for user actions
+University of Jaffna
+
 
 M. Logadharsan (2021/SP/098)
 Email: dharsanmlogadharsan@gmail.com
-- Clients inventory management
-- Ansible to GUI integration for software management
-- Created script for building desktop application
+University of Jaffna
+
 
 K. Abaragithan (2021/SP/061)
 Email: abaragithan02@gmail.com
-- Initial project structure setup and Docker configuration
-- Designed user interface for software management
-- Created script for Windows client configuration
+University of Jaffna
+
 
 Y. Karththik (2021/SP/166)
 Email: karththik2503@gmail.com
-- Designed user interface for lab management
-- Created script for copying SSH keys in Linux machines
-- Configuration and testing in lab environment
+University of Jaffna
+
 
 T. Pirasanthan (2021/SP/141)
 Email: thangavelpirasanthan@gmail.com
-- Configuration and testing in lab environment
-- Documentation and maintenance of README file
+University of Jaffna
 ```
-# Contact Information
-
-
 
 # License
 
