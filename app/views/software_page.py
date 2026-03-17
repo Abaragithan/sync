@@ -21,7 +21,7 @@ import os
 # SoftwarePage
 # =============================================================================
 class SoftwarePage(QWidget):
-    view_status_requested = Signal()
+    view_status_requested = Signal(dict)   # emits { ip: bool } results
     back_to_lab = Signal()
 
     def __init__(self, inventory_manager, state):
@@ -29,6 +29,7 @@ class SoftwarePage(QWidget):
         self.inventory_manager = inventory_manager
         self.state = state
         self._form_cache: dict[tuple[str, str], QWidget] = {}
+        self._execution_results: dict[str, bool] = {}
         self._build_ui()
         self._controller = SoftwareController(
             log_panel=self.log_panel,
@@ -36,6 +37,8 @@ class SoftwarePage(QWidget):
             execute_btn=self.execute_btn,
             state=self.state,
         )
+        # Hook into controller to receive log lines after execution
+        self._controller._on_execution_finished_callback = self._on_execution_done
 
     # =========================================================================
     # UI construction
@@ -58,8 +61,10 @@ class SoftwarePage(QWidget):
         chrome_layout.setSpacing(6)
         btn_row = QHBoxLayout()
         self.back_btn = QPushButton("← Back")
-        self.back_btn.setFixedWidth(90)
+        self.back_btn.setFixedSize(90, 38)
         self.back_btn.setObjectName("BackBtn")
+        self.back_btn.setCursor(Qt.PointingHandCursor)
+        #self.back_btn.clicked.connect(self.back_to_software.emit)
         self.back_btn.clicked.connect(self.back_to_lab.emit)
         btn_row.addWidget(self.back_btn)
         btn_row.addStretch()
@@ -174,6 +179,7 @@ class SoftwarePage(QWidget):
         self.log_panel.retry_btn.clicked.connect(self._on_retry)
         self.log_panel.new_task_btn.clicked.connect(self._on_new_task)
         self.log_panel.export_btn.clicked.connect(self._on_export_log)
+        self.log_panel.view_results_btn.clicked.connect(self._on_view_results)
 
         content_layout.addWidget(left_scroll, 2)
         content_layout.addWidget(self._vline)
@@ -284,6 +290,8 @@ class SoftwarePage(QWidget):
                 "⚠ No PCs selected – go back and choose targets.", "error"
             )
             return
+        self._execution_results = {}
+        self.log_panel.view_results_btn.setEnabled(True)
         self.progress_bar.set_step("executing")
         self.execute_btn.setEnabled(False)
         self.execute_btn.setText("Executing...")
@@ -306,6 +314,7 @@ class SoftwarePage(QWidget):
         self.log_panel.append_line(f"✗ {msg}", "error")
 
     def _on_retry(self):
+        self._execution_results = {}
         self._controller.retry()
 
     def _on_new_task(self):
@@ -313,9 +322,14 @@ class SoftwarePage(QWidget):
         if key in self._form_cache:
             self._form_cache[key].reset()
         self.log_panel.clear()
+        self.log_panel.view_results_btn.setEnabled(False)
+        self._execution_results = {}
         self.progress_bar.set_step("configure")
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("Execute →")
+
+    def _on_view_results(self):
+        self.view_status_requested.emit(self._execution_results)
 
     def _on_export_log(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -329,6 +343,38 @@ class SoftwarePage(QWidget):
         except OSError as e:
             self.log_panel.append_line(f"Export failed: {e}", "error")
 
+    # =========================================================================
+    # Parse PLAY RECAP to extract per-host results
+    # =========================================================================
+    def _on_execution_done(self, ok: bool, log_lines: list[str]):
+        results: dict[str, bool] = {}
+        in_recap = False
+        for line in log_lines:
+            stripped = line.strip()
+            if "PLAY RECAP" in stripped:
+                in_recap = True
+                continue
+            if in_recap and stripped:
+                # Format: 10.20.9.156  : ok=3  changed=2  unreachable=0  failed=0
+                parts = stripped.split()
+                if len(parts) >= 2 and ":" in stripped:
+                    ip = parts[0]
+                    failed      = 0
+                    unreachable = 0
+                    for part in parts:
+                        if part.startswith("failed="):
+                            try:
+                                failed = int(part.split("=")[1])
+                            except ValueError:
+                                pass
+                        if part.startswith("unreachable="):
+                            try:
+                                unreachable = int(part.split("=")[1])
+                            except ValueError:
+                                pass
+                    results[ip] = (failed == 0 and unreachable == 0)
+        self._execution_results = results
+
     def on_page_show(self):
         key = self._current_key()
         if key in self._form_cache:
@@ -341,6 +387,8 @@ class SoftwarePage(QWidget):
         self._lin_radio.blockSignals(False)
         self.apply_theme()
         self.log_panel.clear()
+        self.log_panel.view_results_btn.setEnabled(False)
+        self._execution_results = {}
         n = len(self.state.selected_targets)
         target_str = f"{n} PC{'s' if n != 1 else ''} selected" if n else "No PCs selected"
         self.log_panel.append_line(
@@ -373,5 +421,3 @@ class _NoForm(QWidget):
 
     def reset(self):
         pass
-
-

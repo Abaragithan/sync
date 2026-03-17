@@ -8,6 +8,7 @@ from views.lab_page import LabPage
 from views.software_page import SoftwarePage
 from views.lab_edit_page import LabEditPage
 from views.dashboard_page import DashboardPage
+from views.operation_status_page import OperationStatusPage
 
 
 class MainWindow(QMainWindow):
@@ -28,6 +29,8 @@ class MainWindow(QMainWindow):
         self.lab = LabPage(self.inventory_manager, self.state)
         self.software = SoftwarePage(self.inventory_manager, self.state)
         self.lab_edit = LabEditPage(self.inventory_manager, self.state)
+        self.status_page = OperationStatusPage(self.inventory_manager, self.state)
+
 
         # Stack order
         self.stack.addWidget(self.welcome)
@@ -35,6 +38,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.lab)
         self.stack.addWidget(self.software)
         self.stack.addWidget(self.lab_edit)
+        self.stack.addWidget(self.status_page)
 
         # -------- Navigation --------
 
@@ -50,6 +54,10 @@ class MainWindow(QMainWindow):
 
         self.lab_edit.back_btn.clicked.connect(self._back_from_lab_edit)
         self.software.back_to_lab.connect(self._back_from_software)
+
+        self.software.view_status_requested.connect(self._go_status_page)
+        self.status_page.back_to_software.connect(lambda: self.stack.setCurrentWidget(self.software)
+)
 
         # Central widget
         w = QWidget()
@@ -78,6 +86,10 @@ class MainWindow(QMainWindow):
 
     def _back_from_software(self):
         self.stack.setCurrentWidget(self.lab)
+
+    def _go_status_page(self, results: dict):
+        self.status_page.load_results(results)
+        self.stack.setCurrentWidget(self.status_page)
 
 def main():
     app = QApplication(sys.argv)

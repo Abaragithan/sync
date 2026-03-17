@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Callable
 
 from core.ansible_worker import AnsibleWorker
 
@@ -30,18 +31,23 @@ class SoftwareController:
         self.state        = state
         self._worker: AnsibleWorker | None = None
         self._last_payload: dict | None = None
+        self._log_lines: list[str] = []
+        # Set by SoftwarePage to receive (ok, log_lines) after execution
+        self._on_execution_finished_callback: Callable | None = None
 
     # =========================================================================
     # Public API called by SoftwarePage
     # =========================================================================
     def run(self, payload: dict):
         self._last_payload = payload
+        self._log_lines = []
         self.log_panel.clear()
         self._run_ansible(payload)
 
     def retry(self):
         if self._last_payload is None:
             return
+        self._log_lines = []
         self.progress_bar.set_step("executing")
         self.execute_btn.setEnabled(False)
         self.execute_btn.setText("Executing...")
@@ -262,6 +268,7 @@ class SoftwareController:
                 print(f"[SoftwarePage] Could not copy installer to repo: {e}")
 
     def _on_ansible_line(self, line: str):
+        self._log_lines.append(line)
         low = line.lower()
         if "play recap" in low:
             self.log_panel.append_line(line, "dim")
@@ -291,3 +298,7 @@ class SoftwareController:
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("Execute →")
         self._worker = None
+
+        # Fire callback so SoftwarePage can parse the RECAP
+        if self._on_execution_finished_callback:
+            self._on_execution_finished_callback(ok, list(self._log_lines))

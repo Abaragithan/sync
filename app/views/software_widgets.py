@@ -141,17 +141,37 @@ class LogPanel(QWidget):
         arow = QHBoxLayout(self._action_bar)
         arow.setContentsMargins(12, 0, 12, 0)
         arow.setSpacing(8)
-        self.retry_btn = QPushButton("↺ Retry")
-        self.new_task_btn = QPushButton("+ New Task")
-        self.export_btn = QPushButton("↓ Export Log")
+
+        self.retry_btn        = QPushButton("↺ Retry")
+        self.new_task_btn     = QPushButton("+ New Task")
+        self.export_btn       = QPushButton("↓ Export Log")
+        self.view_results_btn = QPushButton("🖥 View Results")
+        self.view_results_btn.setEnabled(False)
+
         btn_style = (
             f"background: {t['abar_btn_bg']}; border: 1px solid {t['abar_btn_bdr']};"
             f" color: {t['abar_btn_fg']}; border-radius: 6px; padding: 5px 12px; font-size: 12px;"
         )
+        view_results_style = (
+            f"QPushButton {{"
+            f" background: {t['abar_btn_bg']}; border: 1px solid {t['abar_btn_bdr']};"
+            f" color: {t['abar_btn_fg']}; border-radius: 6px; padding: 5px 12px; font-size: 12px;"
+            f"}}"
+            f"QPushButton:disabled {{"
+            f" background: {t['abar_btn_bg']}; border: 1px solid {t['abar_btn_bdr']};"
+            f" color: #cbd5e1;"
+            f"}}"
+        )
+
         for btn in (self.retry_btn, self.new_task_btn, self.export_btn):
             btn.setStyleSheet(btn_style)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             arow.addWidget(btn)
+
+        self.view_results_btn.setStyleSheet(view_results_style)
+        self.view_results_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        arow.addWidget(self.view_results_btn)
+
         self._action_bar.hide()
         self._layout.addWidget(self._action_bar)
 
@@ -162,12 +182,12 @@ class LogPanel(QWidget):
 
     def append_line(self, text: str, style: str = "normal"):
         t = _t()
-        is_error = style == "error"
-        is_dim   = style == "dim"
+        is_error   = style == "error"
+        is_dim     = style == "dim"
         is_success = style == "success"
         colour = (
-            t["log_error"] if is_error else
-            t["log_dim"] if is_dim else
+            t["log_error"]   if is_error   else
+            t["log_dim"]     if is_dim     else
             t["log_success"] if is_success else
             t["log_text"]
         )
