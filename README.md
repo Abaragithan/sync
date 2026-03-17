@@ -511,7 +511,7 @@ Restart-Service sshd
 5. **Use dedicated service accounts** with minimal required permissions where possible
 
 # Project Structure
-
+```text
 sync/
 ├── ansible/
 │   ├── inventory/
@@ -572,7 +572,7 @@ sync/
 ├── run.sh
 └── setup-openssh-ansible.ps1
 
-
+```
 
 # Contributors
 
