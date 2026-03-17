@@ -73,6 +73,15 @@ class LabPage(QWidget):
 
         lab_info.addWidget(self.lab_title)
         lab_info.addWidget(self.lab_subtitle)
+
+        legend = QHBoxLayout()
+        legend.setSpacing(12)
+
+        legend.addWidget(self._build_legend_item("#2563eb", "Windows"))
+        legend.addWidget(self._build_legend_item("#d4a017", "Linux"))
+        legend.addStretch()
+
+        lab_info.addLayout(legend)
         header.addLayout(lab_info, 1)
 
         # Lab selector - FIXED version
@@ -179,6 +188,24 @@ class LabPage(QWidget):
         footer_layout.addLayout(right_actions, 1)
 
         main_layout.addWidget(footer)
+
+    def _build_legend_item(self, color: str, text: str) -> QFrame:
+        item = QFrame()
+
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        dot = QLabel()
+        dot.setFixedSize(10, 10)
+        dot.setStyleSheet(f"background-color: {color}; border-radius: 5px;")
+
+        label = QLabel(text)
+        label.setStyleSheet("color: #475569; font-size: 12px; font-weight: 600;")
+
+        layout.addWidget(dot)
+        layout.addWidget(label)
+        return item
 
     def _apply_styles(self):
         """Apply light theme styles"""
