@@ -68,6 +68,11 @@ class InventoryManager:
             json.dump(data, f, indent=2)
         print(f"[INVENTORY] Saved to {INVENTORY_FILE}")
 
+    def reload(self) -> None:
+        """Reload inventory from disk so all pages can refresh from the latest data."""
+        self.data = self._load()
+        print(f"[INVENTORY] Reloaded {len(self.get_all_labs())} labs from disk")
+
     def _is_new_format(self) -> bool:
         return isinstance(self.data, dict) and "labs" in self.data and isinstance(self.data["labs"], dict)
 

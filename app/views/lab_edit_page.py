@@ -409,11 +409,14 @@ class LabEditPage(QWidget):
             }
         """)
 
-    def _refresh_lab_list(self):
+    def _refresh_lab_list(self, preferred_lab: str | None = None):
         self.lab_combo.clear()
         labs = self.inventory_manager.get_all_labs()
         if labs:
             self.lab_combo.addItems(labs)
+            selected_lab = preferred_lab or getattr(self.state, "current_lab", "")
+            if selected_lab in labs:
+                self.lab_combo.setCurrentText(selected_lab)
         else:
             self.lab_combo.addItem("No labs available")
 
@@ -882,7 +885,7 @@ class LabEditPage(QWidget):
             
             # Refresh the view
             self.state.selected_targets.clear()
-            self._refresh_lab_list()
+            self._refresh_lab_list(result.lab_name)
             self.load_lab(result.lab_name)
             
             show_glass_message(

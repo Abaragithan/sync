@@ -594,10 +594,10 @@ class LabPage(QWidget):
             else:
                 show_glass_message(self, "Error", f"Failed to delete lab.", QMessageBox.Critical)
 
-    def refresh_labs(self):
+    def refresh_labs(self, preferred_lab: str | None = None):
         """Refresh lab list"""
         # Store current selection to restore it later
-        current_text = self.lab_combo.currentText()
+        current_text = preferred_lab or getattr(self.state, "current_lab", "") or self.lab_combo.currentText()
         
         # Clear and repopulate
         self.lab_combo.clear()
@@ -608,6 +608,7 @@ class LabPage(QWidget):
             # Try to restore previous selection
             if current_text and current_text in labs:
                 self.lab_combo.setCurrentText(current_text)
+                self._on_lab_changed(current_text)
             elif labs:
                 # If no previous selection or it's invalid, select first lab
                 self.lab_combo.setCurrentIndex(0)
@@ -617,6 +618,7 @@ class LabPage(QWidget):
         else:
             self.lab_combo.addItem("No labs available")
             self.lab_combo.setCurrentIndex(0)
+            self._on_lab_changed("No labs available")
 
     def on_page_show(self):
         """Called when page is shown - refresh the display"""

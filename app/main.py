@@ -73,15 +73,23 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.software)
 
     def _go_lab_edit(self, lab_name: str):
+        self.inventory_manager.reload()
+        self.dashboard.refresh_labs()
         self.lab_edit.load_lab(lab_name)
         self.stack.setCurrentWidget(self.lab_edit)
 
     def _back_from_lab_edit(self):
-        self.lab._render_lab()
+        self.inventory_manager.reload()
+        self.dashboard.refresh_labs()
+        preferred_lab = getattr(self.state, "current_lab", "") or None
+        self.lab.refresh_labs(preferred_lab)
+        self.lab.on_page_show()
         self.stack.setCurrentWidget(self.lab)
 
     def _handle_lab_selection(self, lab_name: str):
-        self.lab._on_lab_changed(lab_name)
+        self.inventory_manager.reload()
+        self.dashboard.refresh_labs()
+        self.lab.refresh_labs(lab_name)
         self.stack.setCurrentWidget(self.lab)
 
     def _back_from_software(self):
