@@ -8,21 +8,17 @@
 #   PC-001,GROUP0004-DEV0001,REG-758D039B9EB9224B
 #   PC-002,GROUP0004-DEV0002,REG-58D6E70038DCD399
 #
-# IP mapping: PC-001 -> 10.20.9.1, PC-010 -> 10.20.9.10, etc.
+# IP mapping: PC-001 -> 10.20.9.101, PC-010 -> 10.20.9.110, etc.
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_register.yml \
-#     -e "main_exe=CheatShieldClient_0_1_5.exe" \
-#     -e "tokens_csv=tokens.csv"
-
-
+# ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_register.yml \
+#   -e "main_exe=CheatShieldClient_0_1_10.exe" \
+#   -e "tokens_csv=tokens.csv"
 - name: Register Cheat Shield with Per-PC Token
   hosts: windows_clients
   gather_facts: false
-
   vars:
     install_dir: 'C:\Downloads'
-
   pre_tasks:
     - name: Fail if required arguments are not provided
       fail:
@@ -38,13 +34,12 @@
 
     - name: Auto-generate PC label from inventory IP
       set_fact:
-        pc_label: "PC-{{ '%03d' | format(inventory_hostname.split('.')[-1] | int - 160 + 71) }}"
+        pc_label: "PC-{{ '%03d' | format(inventory_hostname.split('.')[-1] | int - 100) }}"
       # Explanation:
-      # IP 10.20.9.161 → PC-071
-      # IP 10.20.9.162 → PC-072
-      # IP 10.20.9.163 → PC-073
-      # IP 10.20.9.164 → PC-074
-      # IP 10.20.9.165 → PC-075
+      # IP 10.20.9.101 → last octet 101 - 100 = 1  → PC-001
+      # IP 10.20.9.102 → last octet 102 - 100 = 2  → PC-002
+      # IP 10.20.9.103 → last octet 103 - 100 = 3  → PC-003
+      # IP 10.20.9.110 → last octet 110 - 100 = 10 → PC-010
 
     - name: Find matching token row for this host
       set_fact:
@@ -67,9 +62,9 @@
     - name: Run main exe with registration token
       win_shell: |
         Start-Process -FilePath "{{ install_dir }}\{{ main_exe }}" `
-          -ArgumentList "--register-cli={{ client_token }}" `
-          -Verb RunAs `
-          -Wait
+            -ArgumentList "--register-cli={{ client_token }}" `
+            -Verb RunAs `
+            -Wait
       register: register_result
 
     - name: Show execution result

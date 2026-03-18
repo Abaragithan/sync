@@ -77,7 +77,7 @@ class LabPage(QWidget):
         legend = QHBoxLayout()
         legend.setSpacing(12)
 
-        legend.addWidget(self._build_legend_item("#2563eb", "Windows"))
+        legend.addWidget(self._build_legend_item("#22c55e", "Windows"))
         legend.addWidget(self._build_legend_item("#d4a017", "Linux"))
         legend.addStretch()
 

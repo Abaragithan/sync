@@ -4,10 +4,10 @@
 # Task: Copy both exe files to clients and run with server URL
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml \
-#     -e "server_url=http://10.20.11.184:3000" \
-#     -e "main_exe=CheatShieldClient_0_1_5.exe" \
-#     -e "second_exe=nssm.exe"
+  # ansible-playbook -i inventory/hosts.ini playbooks/deploy_cheatshield_install.yml \
+  #   -e "server_url=http://10.20.11.184:3000" \
+  #   -e "main_exe=CheatShieldClient_0_1_10.exe" \
+  #   -e "second_exe=nssm.exe"
 #
 # Place the exe files in ansible/files/ on the controller
 
